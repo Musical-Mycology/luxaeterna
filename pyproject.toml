@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luxaeterna"
+version = "0.1.0"
+description = "Fast, lightweight DMX512 control for audio-reactive lighting. Part of the Musical Mycology toolset."
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Chris", email = "chris@musicalmycology.org" },
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+serial = ["pyserial>=3.5"]
+all = ["pyserial>=3.5"]
+
+[tool.setuptools.packages.find]
+include = ["luxaeterna*"]

@@ -1,0 +1,26 @@
+"""Lux Aeterna — DMX protocol constants."""
+
+# DMX512 standard
+DMX_CHANNELS = 512
+DMX_MIN_VALUE = 0
+DMX_MAX_VALUE = 255
+DMX_START_CODE = 0x00
+
+# Refresh rates
+DMX_REFRESH_HZ = 44  # Standard DMX refresh rate (~23ms per frame)
+
+# Art-Net
+ARTNET_PORT = 6454
+ARTNET_HEADER = b"Art-Net\x00"
+ARTNET_OPCODE_DMX = 0x5000
+ARTNET_PROTOCOL_VERSION = 14
+
+# sACN / E1.31
+SACN_PORT = 5568
+SACN_MULTICAST_BASE = "239.255.{}.{}"  # .high.low of universe
+
+# ENTTEC
+ENTTEC_PRO_START = 0x7E
+ENTTEC_PRO_END = 0xE7
+ENTTEC_PRO_DMX_LABEL = 6
+ENTTEC_BAUDRATE = 115200
