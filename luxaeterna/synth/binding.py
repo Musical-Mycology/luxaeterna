@@ -41,7 +41,7 @@ def resolve(decl: LightInstrumentDecl, cap: SurfaceCapability) -> ActiveBinding:
     routes: dict[str, Callable] = {}
     for lane in decl.lanes:
         if lane.source == "note":
-            routes["note"] = lambda pitch, vel: obj.noteon(pitch, vel)
+            routes["note"] = lambda pitch, vel: obj.noteon(pitch, vel, note_id=pitch)
         elif lane.source.startswith("cc:"):
             routes[lane.source] = (
                 lambda value, dest=lane.dest, curve=lane.curve:

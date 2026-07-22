@@ -24,7 +24,7 @@ def dispatch_midi(bindings: list[ActiveBinding], status: int, d1: int, d2: int) 
         for b in bindings:
             noteoff = getattr(b.obj, "noteoff", None)
             if noteoff is not None:
-                noteoff(("auto", d1))                 # best-effort; see Task 11 note
+                noteoff(d1)                           # pitch-addressed: matches note_id=pitch from the note route
     elif kind == 0xB0:                                # control change
         key = f"cc:{d1}"
         for b in bindings:
