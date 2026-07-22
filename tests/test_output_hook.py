@@ -48,3 +48,28 @@ def test_on_frame_exception_is_routed_to_on_error_and_loop_survives():
     loop._loop_once()          # still callable a second time (loop would survive)
     assert len(errors) == 2
     assert isinstance(errors[0], ValueError)
+
+
+def test_default_error_logging_is_throttled(caplog):
+    import logging as _logging
+    uni = Universe()
+
+    class _BoomBackend:
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def send(self, frame, universe_id=0):
+            raise RuntimeError("dead backend")
+
+        @property
+        def is_open(self):
+            return True
+
+    loop = OutputLoop(uni, _BoomBackend(), always_send=True)
+    with caplog.at_level(_logging.ERROR, logger="luxaeterna.output"):
+        for _ in range(50):
+            loop._loop_once()
+    assert len(caplog.records) == 1        # first logs; 49 suppressed within 5 s

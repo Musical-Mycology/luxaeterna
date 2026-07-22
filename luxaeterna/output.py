@@ -9,6 +9,7 @@ from typing import Callable
 
 from .backends.base import DMXBackend
 from .constants import DMX_REFRESH_HZ
+from .logutil import ThrottledLog
 from .universe import Universe
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class OutputLoop:
         self.always_send = always_send
         self.on_frame = on_frame
 
+        self._throttle = ThrottledLog(log)
         self._running = False
         self._thread: threading.Thread | None = None
         self._fps: float = 0.0
@@ -113,8 +115,10 @@ class OutputLoop:
                 if self.on_error:
                     self.on_error(exc)
                 else:
-                    log.error("on_frame hook error on universe %d: %s",
-                              self.universe.universe_id, exc)
+                    self._throttle.log(
+                        f"on_frame:{self.universe.universe_id}", logging.ERROR,
+                        "on_frame hook error on universe %d: %s",
+                        self.universe.universe_id, exc)
 
         if self.always_send or self.universe.dirty:
             try:
@@ -125,8 +129,10 @@ class OutputLoop:
                 if self.on_error:
                     self.on_error(exc)
                 else:
-                    log.error("Output error on universe %d: %s",
-                              self.universe.universe_id, exc)
+                    self._throttle.log(
+                        f"send:{self.universe.universe_id}", logging.ERROR,
+                        "Output error on universe %d: %s",
+                        self.universe.universe_id, exc)
         return False
 
     def _loop(self) -> None:
