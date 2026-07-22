@@ -52,6 +52,7 @@ class LightSynth:
         if note_id is None:
             note_id = ("auto", self._auto)
             self._auto += 1
+        self.voices.pop(note_id, None)                     # re-trigger: remove stale entry so re-insert lands newest
         if len(self.voices) >= self.max_voices:
             self.voices.pop(next(iter(self.voices)))       # drop oldest
         inst, env = self.voice_factory(pitch, vel, self.shared)
