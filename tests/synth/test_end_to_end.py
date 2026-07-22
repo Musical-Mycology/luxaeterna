@@ -16,7 +16,7 @@ from luxaeterna.universe import Universe
 
 MANIFEST = {
     "instruments": [{
-        "instrument": "bloom", "target": "primary", "params": {},
+        "instrument": "bloom", "target": "primary", "params": {"hue": 1.0 / 3.0},   # green default; CC74=0 must drive it to red
         "lanes": [{"source": "note", "dest": "trigger"},
                   {"source": "cc:74", "dest": "hue"}],
     }]
@@ -33,7 +33,7 @@ def test_note_over_o2_lights_the_shroom():
     engine.render_into(uni)
     assert max(uni.get_frame()[:36]) == 0                       # dark before note
 
-    bridge.on_midi((0xB0 << 16) | (74 << 8) | 0)                # CC74=0 -> red
+    bridge.on_midi((0xB0 << 16) | (74 << 8) | 0)                # CC74=0 -> hue 0 = red, overriding the green default (proves CC routing)
     bridge.on_midi((0x90 << 16) | (60 << 8) | 127)              # note-on
     engine.render_into(uni)
     frame = uni.get_frame()[:36]
