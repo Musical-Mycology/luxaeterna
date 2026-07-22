@@ -194,6 +194,9 @@ class StatusDirector:
             if self._prior == DISCONNECTED:
                 self.state = DISCONNECTED
                 self._set_signature(registry.build("sys:disconnected"))
+            elif self.pending is not None:
+                manifest, self.pending = self.pending, None
+                self._resolve_and_load(manifest)
             else:
                 self._enter_idle()
 

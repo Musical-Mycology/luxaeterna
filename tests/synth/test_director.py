@@ -129,6 +129,26 @@ def test_selftest_gated_by_state_and_restores():
     assert d.state == RUNNING
 
 
+def test_swap_during_selftest_loads_after_sweep():
+    d = _mk()
+    d.selftest()
+    d.swap(MANIFEST)                                 # parked as pending
+    _run(d, 2.5)                                     # sweep (2.0 s) completes
+    assert d.state == LOADING and d.bit_name == "testbit"
+    assert d.pending is None
+
+
+def test_swap_during_selftest_from_disconnected_held_until_reconnect():
+    d = _mk()
+    d.disconnect()
+    d.selftest()
+    d.swap(MANIFEST)                                 # parked as pending
+    _run(d, 2.5)                                     # sweep completes
+    assert d.state == DISCONNECTED and d.pending is not None
+    d.reconnect()
+    assert d.state == LOADING and d.bit_name == "testbit"
+
+
 def test_identify_overlays_without_state_change():
     d = _mk()
     d.identify(duration=0.2)
