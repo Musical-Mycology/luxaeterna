@@ -1,3 +1,7 @@
+"""Lux Aeterna — tests for the control-rate uGens."""
+
+from __future__ import annotations
+
 import numpy as np
 from luxaeterna.synth.signal import RenderContext
 from luxaeterna.synth.ugens import Const, Smooth, LFO, Envelope, CCReader, NoteTrigger

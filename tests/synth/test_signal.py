@@ -1,3 +1,7 @@
+"""Lux Aeterna — tests for the signal core (LightUgen, RenderContext)."""
+
+from __future__ import annotations
+
 import numpy as np
 from luxaeterna.synth.signal import LightUgen, RenderContext, as_ugen
 
