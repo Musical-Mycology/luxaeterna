@@ -26,16 +26,15 @@ MANIFEST = {
 def test_note_over_o2_lights_the_shroom():
     cap = shroom_capability("ie3")
     bindings, bridge = build_session(LightManifest.from_dict(MANIFEST), cap)
-    uni_clock = iter([i * 0.02 for i in range(10)]).__next__
     uni = Universe()
-    engine = LightEngine(uni, cap, bindings, clock=uni_clock)
+    engine = LightEngine(cap)
 
-    engine.render_into(uni)
+    engine.render_into(uni, bindings, t=0.0, dt=0.02, frame=0)
     assert max(uni.get_frame()[:36]) == 0                       # dark before note
 
-    bridge.on_midi((0xB0 << 16) | (74 << 8) | 0)                # CC74=0 -> hue 0 = red, overriding the green default (proves CC routing)
+    bridge.on_midi((0xB0 << 16) | (74 << 8) | 0)                # CC74=0 -> red
     bridge.on_midi((0x90 << 16) | (60 << 8) | 127)              # note-on
-    engine.render_into(uni)
+    engine.render_into(uni, bindings, t=0.02, dt=0.02, frame=1)
     frame = uni.get_frame()[:36]
     assert max(frame) > 0                                        # lit after note
 

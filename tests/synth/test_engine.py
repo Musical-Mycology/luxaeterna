@@ -7,7 +7,7 @@ from luxaeterna.universe import Universe
 from luxaeterna.synth.engine import LightEngine, channels_for, to_dmx_bytes, blend_into
 from luxaeterna.synth.capability import shroom_capability
 from luxaeterna.synth.manifest import LightInstrumentDecl, LightLane
-from luxaeterna.synth.binding import resolve
+from luxaeterna.synth.binding import resolve, ActiveBinding
 
 
 def test_channels_and_dmx_byte_order():
@@ -26,15 +26,49 @@ def test_blend_add_and_over():
 
 def test_engine_writes_universe_on_note():
     cap = shroom_capability("ie3")
-    decl = LightInstrumentDecl("bloom", "primary", {},
-                               [LightLane("note", "trigger")])
-    binding = resolve(decl, cap)
+    binding = resolve(LightInstrumentDecl("bloom", "primary", {},
+                                          [LightLane("note", "trigger")]), cap)
     uni = Universe()
-    clock = iter([0.0, 0.01, 0.02, 0.03]).__next__
-    engine = LightEngine(uni, cap, [binding], clock=clock)
+    engine = LightEngine(cap)
 
-    engine.render_into(uni)                       # frame 0 -> dark
+    engine.render_into(uni, [binding], t=0.0, dt=0.01, frame=0)
     assert max(uni.get_frame()[:36]) == 0
     binding.routes["note"](60, 1.0)
-    engine.render_into(uni)                        # frame 1 -> lit
+    engine.render_into(uni, [binding], t=0.01, dt=0.01, frame=1)
     assert max(uni.get_frame()[:36]) > 0
+
+
+def test_engine_isolates_failing_binding_and_reports_it():
+    cap = shroom_capability("ie3")
+    good = resolve(LightInstrumentDecl("bloom", "primary", {},
+                                       [LightLane("note", "trigger")]), cap)
+    good.routes["note"](60, 1.0)
+
+    class _Boom:
+        def render(self, ctx):
+            raise RuntimeError("bad ugen")
+
+    bad = ActiveBinding(obj=_Boom(), zone=cap.zone("ring"), blend="add",
+                        routes={})
+    uni = Universe()
+    engine = LightEngine(cap)
+    failed = engine.render_into(uni, [bad, good], t=0.0, dt=0.01, frame=0)
+    assert failed == [bad]
+    assert max(uni.get_frame()[:36]) > 0        # good binding still rendered
+
+
+def test_engine_gain_scales_output():
+    cap = shroom_capability("ie3")
+
+    def lit_binding():
+        b = resolve(LightInstrumentDecl("bloom", "primary", {},
+                                        [LightLane("note", "trigger")]), cap)
+        b.routes["note"](60, 1.0)
+        return b
+
+    uni_full, uni_dim = Universe(), Universe()
+    LightEngine(cap).render_into(uni_full, [lit_binding()],
+                                 t=0.0, dt=0.01, frame=0)
+    LightEngine(cap).render_into(uni_dim, [lit_binding()],
+                                 t=0.0, dt=0.01, frame=0, gain=0.25)
+    assert 0 < max(uni_dim.get_frame()[:36]) < max(uni_full.get_frame()[:36])

@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import time
-
 import numpy as np
 
-from .binding import ActiveBinding
 from .capability import SurfaceCapability
 from .signal import RenderContext
 
@@ -34,43 +31,38 @@ def blend_into(surface: np.ndarray, sl: slice, top: np.ndarray, mode: str) -> No
 
 
 class LightEngine:
-    """Renders every active binding into a shared surface, then pushes the
-    composited frame into the Universe as DMX bytes.
+    """Composites whatever binding list it is handed into DMX bytes.
 
-    ``clock`` is injectable (defaults to ``time.monotonic``) so tests can
-    drive deterministic frame timing.
-    """
+    Timing (t/dt/frame) is supplied by the caller — the LightSession owns the
+    clock. Per-binding exceptions are swallowed and the offenders returned so
+    the director can quarantine repeat failures; one bad binding never costs
+    the rest of the surface its frame. Zone positions are cached lazily by
+    zone name because the binding list changes at runtime (bit swaps)."""
 
-    def __init__(self, universe, cap: SurfaceCapability,
-                 bindings: list[ActiveBinding], clock=time.monotonic) -> None:
-        self.universe = universe
+    def __init__(self, cap: SurfaceCapability) -> None:
         self.cap = cap
-        self.bindings = bindings
-        self._clock = clock
         self._channels = channels_for(cap.color_order)
-        self._frame = 0
-        self._start: float | None = None
-        self._last: float | None = None
-        self._positions = {b.zone.name: np.linspace(0, 1, b.zone.count)
-                           for b in bindings}
+        self._positions: dict[str, np.ndarray] = {}
 
-    def render_into(self, universe) -> None:
-        now = self._clock()
-        if self._start is None:
-            self._start = now
-            self._last = now
-        t = now - self._start
-        dt = max(now - self._last, 1e-6)
-        self._last = now
-
+    def render_into(self, universe, bindings, t: float, dt: float,
+                    frame: int, gain: float = 1.0) -> list:
         surface = np.zeros((self.cap.pixel_count, self._channels))
-        for b in self.bindings:
-            ctx = RenderContext(time=t, frame=self._frame, dt=dt,
-                                positions=self._positions[b.zone.name],
+        failed = []
+        for b in bindings:
+            pos = self._positions.get(b.zone.name)
+            if pos is None:
+                pos = np.linspace(0, 1, b.zone.count)
+                self._positions[b.zone.name] = pos
+            ctx = RenderContext(time=t, frame=frame, dt=dt, positions=pos,
                                 n=b.zone.count, channels=self._channels)
-            top = b.render(ctx)
+            try:
+                top = b.render(ctx)
+            except Exception:
+                failed.append(b)
+                continue
             sl = slice(b.zone.start, b.zone.start + b.zone.count)
             blend_into(surface, sl, top, b.blend)
-
-        self._frame += 1
+        if gain != 1.0:
+            surface *= gain
         universe.set_range(0, to_dmx_bytes(surface, self.cap.color_order))
+        return failed
