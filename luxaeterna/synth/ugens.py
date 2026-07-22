@@ -224,7 +224,7 @@ class Bloom(LightUgen):
 
     def _compute(self, ctx: RenderContext) -> np.ndarray:
         level = float(np.asarray(self._level.render(ctx)))
-        color = np.asarray(self._color.render(ctx), dtype=float).reshape(-1)[:ctx.channels]
+        color = _broadcast_color(self._color.render(ctx), 1, ctx.channels)[0]
         width = 0.08 + 0.5 * level
         falloff = np.exp(-((ctx.positions - self._center) / width) ** 2)
         intensity = np.clip(level * falloff, 0.0, 1.0)
@@ -243,5 +243,5 @@ class Noise(LightUgen):
     def _compute(self, ctx: RenderContext) -> np.ndarray:
         phase = ctx.positions * self._scale + ctx.time * self._speed
         intensity = 0.5 + 0.5 * np.sin(2 * np.pi * phase)
-        color = np.asarray(self._color.render(ctx), dtype=float).reshape(-1)[:ctx.channels]
+        color = _broadcast_color(self._color.render(ctx), 1, ctx.channels)[0]
         return np.clip(intensity[:, None] * color[None, :], 0.0, 1.0)

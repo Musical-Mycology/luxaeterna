@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from luxaeterna.synth.signal import RenderContext
-from luxaeterna.synth.ugens import (Const, Envelope, SolidColor, Gradient,
+from luxaeterna.synth.ugens import (Const, SolidColor, Gradient,
                                      PaletteMap, Bloom, Noise)
 
 
@@ -46,3 +46,11 @@ def test_noise_is_bounded():
     out = Noise(Const([1, 1, 1]), scale=3.0, speed=1.0).render(ctx(n=16))
     assert out.shape == (16, 3)
     assert out.min() >= 0.0 and out.max() <= 1.0
+
+
+def test_bloom_and_noise_pad_narrow_color_to_channels():
+    # RGB color (3 values) on an RGBW surface (channels=4) must still yield (n, 4)
+    b = Bloom(level=Const(1.0), color=Const([1.0, 0.5, 0.2]), center=0.5)
+    assert b.render(ctx(n=5, channels=4)).shape == (5, 4)
+    nse = Noise(Const([1.0, 0.5, 0.2]), scale=3.0, speed=1.0)
+    assert nse.render(ctx(n=5, channels=4)).shape == (5, 4)
