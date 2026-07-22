@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from luxaeterna.universe import Universe
 from luxaeterna.synth.engine import LightEngine, channels_for, to_dmx_bytes, blend_into
 from luxaeterna.synth.capability import shroom_capability
@@ -38,3 +39,15 @@ def test_engine_writes_universe_on_note():
     binding.routes["note"](60, 1.0)
     engine.render_into(uni)                        # frame 1 -> lit
     assert max(uni.get_frame()[:36]) > 0
+
+
+def test_blend_over_replaces_not_adds():
+    surf = np.ones((2, 3)) * 0.5
+    blend_into(surf, slice(0, 2),
+               np.array([[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]), "over")
+    assert surf[0, 0] == 0.2 and surf[1, 0] == 0.3   # replaced, not 0.5 + top
+
+
+def test_blend_unknown_mode_raises():
+    with pytest.raises(ValueError):
+        blend_into(np.zeros((1, 3)), slice(0, 1), np.zeros((1, 3)), "screen")

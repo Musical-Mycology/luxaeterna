@@ -24,3 +24,9 @@ def test_registry_register_get_and_config_merge():
         {"surface_id": "array", "pixel_count": 300, "color_order": "GRB",
          "zones": [{"name": "primary", "start": 0, "count": 300}]}]})
     assert reg.get("array").pixel_count == 300
+
+
+def test_registry_get_unknown_surface_raises():
+    reg = CapabilityRegistry()
+    with pytest.raises(KeyError):
+        reg.get("nope")
