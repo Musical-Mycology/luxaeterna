@@ -31,8 +31,20 @@ def _require(mapping: dict, key: str, where: str):
 
 
 @dataclass
+class SignatureDecl:
+    """A declarable one-shot light gesture (e.g. a per-role welcome)."""
+    instrument: str             # registered instrument name
+    params: dict = field(default_factory=dict)
+    duration: float = 1.5       # seconds until done
+
+
+@dataclass
 class LightManifest:
     instruments: list[LightInstrumentDecl] = field(default_factory=list)
+    bit_name: str = ""          # Bit identity, for telemetry/log context
+    bit_version: str = ""
+    role: str = ""              # role this manifest was resolved for
+    welcome: SignatureDecl | None = None   # plays in LOADING instead of sys:loaded
 
     @classmethod
     def from_dict(cls, d: dict) -> "LightManifest":
@@ -53,4 +65,16 @@ class LightManifest:
                 params=dict(i.get("params", {})),
                 lanes=lanes,
             ))
-        return cls(instruments=instruments)
+        w = d.get("welcome")
+        welcome = SignatureDecl(
+            instrument=_require(w, "instrument", "light_manifest welcome"),
+            params=dict(w.get("params", {})),
+            duration=w.get("duration", 1.5),
+        ) if w else None
+        return cls(
+            instruments=instruments,
+            bit_name=d.get("bit_name", ""),
+            bit_version=d.get("bit_version", ""),
+            role=d.get("role", ""),
+            welcome=welcome,
+        )

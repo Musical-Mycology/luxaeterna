@@ -31,12 +31,17 @@ class ENTTECOpen(DMXBackend):
     ----------
     port : str
         Serial port path, e.g. ``"/dev/ttyUSB0"`` or ``"COM3"``.
+    write_timeout : float
+        Max seconds a write may block before raising ``SerialTimeoutException``,
+        so a wedged device can't stall the output thread indefinitely.
     """
 
-    def __init__(self, port: str = "/dev/ttyUSB0") -> None:
+    def __init__(self, port: str = "/dev/ttyUSB0",
+                 write_timeout: float = 0.05) -> None:
         if serial is None:
             raise ImportError("pyserial is required for ENTTEC backends: pip install pyserial")
         self.port = port
+        self.write_timeout = write_timeout
         self._serial: serial.Serial | None = None  # type: ignore[name-defined]
 
     def open(self) -> None:
@@ -48,6 +53,7 @@ class ENTTECOpen(DMXBackend):
             bytesize=serial.EIGHTBITS,  # type: ignore[attr-defined]
             stopbits=serial.STOPBITS_TWO,  # type: ignore[attr-defined]
             parity=serial.PARITY_NONE,  # type: ignore[attr-defined]
+            write_timeout=self.write_timeout,
         )
 
     def close(self) -> None:
@@ -67,6 +73,8 @@ class ENTTECOpen(DMXBackend):
 
             # Start code + 512 channel values
             self._serial.write(bytes([DMX_START_CODE]) + bytes(frame))
+        # SerialTimeoutException (write_timeout hit) is an OSError subclass —
+        # a wedged device surfaces as BackendError instead of a blocked thread.
         except OSError as exc:
             raise BackendError(f"ENTTEC Open send failed: {exc}") from exc
 
@@ -84,12 +92,17 @@ class ENTTECPro(DMXBackend):
     ----------
     port : str
         Serial port path.
+    write_timeout : float
+        Max seconds a write may block before raising ``SerialTimeoutException``,
+        so a wedged device can't stall the output thread indefinitely.
     """
 
-    def __init__(self, port: str = "/dev/ttyUSB0") -> None:
+    def __init__(self, port: str = "/dev/ttyUSB0",
+                 write_timeout: float = 0.05) -> None:
         if serial is None:
             raise ImportError("pyserial is required for ENTTEC backends: pip install pyserial")
         self.port = port
+        self.write_timeout = write_timeout
         self._serial: serial.Serial | None = None  # type: ignore[name-defined]
 
     def open(self) -> None:
@@ -98,6 +111,7 @@ class ENTTECPro(DMXBackend):
         self._serial = serial.Serial(  # type: ignore[attr-defined]
             port=self.port,
             baudrate=ENTTEC_BAUDRATE,
+            write_timeout=self.write_timeout,
         )
 
     def close(self) -> None:
@@ -119,6 +133,8 @@ class ENTTECPro(DMXBackend):
                 + bytes([ENTTEC_PRO_END])
             )
             self._serial.write(packet)
+        # SerialTimeoutException (write_timeout hit) is an OSError subclass —
+        # a wedged device surfaces as BackendError instead of a blocked thread.
         except OSError as exc:
             raise BackendError(f"ENTTEC Pro send failed: {exc}") from exc
 
