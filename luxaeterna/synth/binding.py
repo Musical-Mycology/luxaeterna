@@ -34,7 +34,8 @@ class ActiveBinding:
 
 def resolve(decl: LightInstrumentDecl, cap: SurfaceCapability) -> ActiveBinding:
     zone = cap.zone(decl.target)
-    obj = registry.build(decl.instrument, **decl.params)
+    build_params = {k: v for k, v in decl.params.items() if k != "blend"}
+    obj = registry.build(decl.instrument, **build_params)
     blend = decl.params.get("blend", "add")
 
     routes: dict[str, Callable] = {}
