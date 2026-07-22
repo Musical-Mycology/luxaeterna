@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from luxaeterna.synth.manifest import LightManifest, LightInstrumentDecl, LightLane
 
 
@@ -48,3 +49,15 @@ def test_welcome_duration_defaults():
     m = LightManifest.from_dict({
         "welcome": {"instrument": "bloom"}, "instruments": []})
     assert m.welcome.duration == 1.5 and m.welcome.params == {}
+
+
+def test_from_dict_missing_fields_are_contextual():
+    # Missing required fields must raise a KeyError naming the field + its index
+    # path, not a bare KeyError('instrument') (light_manifest is an external
+    # contract consumed by mm-terrarium).
+    with pytest.raises(KeyError, match=r"instruments\[0\].*instrument"):
+        LightManifest.from_dict({"instruments": [{"target": "primary"}]})
+    with pytest.raises(KeyError, match=r"lanes\[0\].*source"):
+        LightManifest.from_dict({"instruments": [{
+            "instrument": "bloom", "target": "primary",
+            "lanes": [{"dest": "hue"}]}]})

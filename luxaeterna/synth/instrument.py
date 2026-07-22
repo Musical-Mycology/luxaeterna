@@ -33,6 +33,10 @@ class LightInstrument:
             raise KeyError(f"no param {name!r} on instrument")
         self.params[name].set(value)
 
+    def param_names(self) -> set[str]:
+        """Known param names — the dests a cc lane may target via .set()."""
+        return set(self.params)
+
     def render(self, ctx: RenderContext) -> np.ndarray:
         return self.output.render(ctx)
 
@@ -71,7 +75,17 @@ class LightSynth:
             env.gate_off()
 
     def set(self, name: str, value) -> None:
+        # The initial ``shared`` dict declares the known params; reject typos so
+        # a bad manifest lane fails loudly instead of silently writing garbage
+        # (mirrors LightInstrument.set's strictness against self.params).
+        if name not in self.shared:
+            raise KeyError(
+                f"no shared param {name!r} on synth (known: {sorted(self.shared)})")
         self.shared[name] = value
+
+    def param_names(self) -> set[str]:
+        """Known param names — the declared shared-param keys a cc lane may target."""
+        return set(self.shared)
 
     def render(self, ctx: RenderContext) -> np.ndarray:
         out = np.zeros((ctx.n, ctx.channels))

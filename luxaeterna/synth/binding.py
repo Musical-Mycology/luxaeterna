@@ -43,6 +43,11 @@ def resolve(decl: LightInstrumentDecl, cap: SurfaceCapability) -> ActiveBinding:
         if lane.source == "note":
             routes["note"] = lambda pitch, vel: obj.noteon(pitch, vel, note_id=pitch)
         elif lane.source.startswith("cc:"):
+            known = obj.param_names()
+            if lane.dest not in known:
+                raise ValueError(
+                    f"instrument {decl.instrument!r}: cc lane {lane.source!r} routes to "
+                    f"unknown param {lane.dest!r}; known params: {sorted(known)}")
             routes[lane.source] = (
                 lambda value, dest=lane.dest, curve=lane.curve:
                 obj.set(dest, apply_curve(curve, value)))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from luxaeterna.universe import Universe
 from luxaeterna.synth.engine import LightEngine, channels_for, to_dmx_bytes, blend_into
 from luxaeterna.synth.capability import shroom_capability
@@ -72,3 +73,15 @@ def test_engine_gain_scales_output():
     LightEngine(cap).render_into(uni_dim, [lit_binding()],
                                  t=0.0, dt=0.01, frame=0, gain=0.25)
     assert 0 < max(uni_dim.get_frame()[:36]) < max(uni_full.get_frame()[:36])
+
+
+def test_blend_over_replaces_not_adds():
+    surf = np.ones((2, 3)) * 0.5
+    blend_into(surf, slice(0, 2),
+               np.array([[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]), "over")
+    assert surf[0, 0] == 0.2 and surf[1, 0] == 0.3   # replaced, not 0.5 + top
+
+
+def test_blend_unknown_mode_raises():
+    with pytest.raises(ValueError):
+        blend_into(np.zeros((1, 3)), slice(0, 1), np.zeros((1, 3)), "screen")

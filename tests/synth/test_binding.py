@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from luxaeterna.synth.manifest import LightInstrumentDecl, LightLane
 from luxaeterna.synth.capability import shroom_capability
 from luxaeterna.synth.binding import resolve, apply_curve
@@ -60,6 +61,8 @@ def test_cc_routes_keep_their_own_lane_dest_and_curve():
     class _Recorder:
         def set(self, name, value):
             calls.append((name, value))
+        def param_names(self):
+            return {"alpha", "beta"}
         def render(self, ctx):
             import numpy as np
             return np.zeros((ctx.n, ctx.channels))
@@ -74,3 +77,54 @@ def test_cc_routes_keep_their_own_lane_dest_and_curve():
     binding.routes["cc:2"](0.5)
     assert ("alpha", 0.5) in calls           # linear curve, own dest
     assert ("beta", 0.25) in calls           # exp curve, own dest
+
+
+def test_resolve_rejects_unknown_cc_lane_dest():
+    # A typo'd cc-lane dest must fail loudly at resolve() (session setup) rather
+    # than silently degrade to a per-packet log warning once MIDI starts flowing.
+    decl = LightInstrumentDecl(
+        instrument="bloom", target="ring", params={},
+        lanes=[LightLane("note", "trigger"), LightLane("cc:74", "hveu")])
+    with pytest.raises(ValueError) as ei:
+        resolve(decl, shroom_capability("ie3"))
+    msg = str(ei.value)
+    assert "hveu" in msg and "bloom" in msg and "cc:74" in msg   # contextual: dest + instrument + lane
+
+
+def test_resolve_accepts_known_cc_lane_dest():
+    # A valid dest ("hue" is a bloom shared param) still resolves cleanly.
+    decl = LightInstrumentDecl(
+        instrument="bloom", target="ring", params={},
+        lanes=[LightLane("cc:74", "hue")])
+    binding = resolve(decl, shroom_capability("ie3"))            # must NOT raise
+    assert "cc:74" in binding.routes
+
+
+def test_resolve_does_not_validate_note_lane_dest():
+    # note-source lanes map to obj.noteon, not .set — their dest ("trigger" is not
+    # a param name) is intentionally ignored and must never be validated.
+    decl = LightInstrumentDecl(
+        instrument="bloom", target="ring", params={},
+        lanes=[LightLane("note", "trigger")])
+    binding = resolve(decl, shroom_capability("ie3"))            # must NOT raise
+    assert "note" in binding.routes
+
+
+def test_resolve_validates_cc_dest_for_light_instrument():
+    # The known-param check is uniform across instrument types: a LightInstrument
+    # advertises self.params, and a bad cc dest is caught the same way as a synth's.
+    from luxaeterna.synth import registry
+    from luxaeterna.synth.ugens import Const, SolidColor
+    from luxaeterna.synth.instrument import Param, LightInstrument
+
+    def _li_factory(**params):
+        color = Const([0.0, 0.0, 0.0])
+        return LightInstrument(SolidColor(color), {"color": Param("color", color)})
+
+    registry.register("_li", _li_factory)
+    decl = LightInstrumentDecl(
+        instrument="_li", target="primary", params={},
+        lanes=[LightLane("cc:9", "colour")])                    # British-spelling typo of "color"
+    with pytest.raises(ValueError) as ei:
+        resolve(decl, shroom_capability("ie3"))
+    assert "colour" in str(ei.value)

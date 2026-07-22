@@ -90,6 +90,7 @@ class Envelope(LightUgen):
     def gate_on(self) -> None:
         self._stage = "attack"
         self._t = 0.0
+        self._level = 0.0          # retrigger from silence (correct if reused)
 
     def gate_off(self) -> None:
         if self._stage not in ("idle", "done"):

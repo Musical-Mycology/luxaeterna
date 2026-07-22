@@ -24,7 +24,14 @@ def _bloom_voice(pitch: int, vel: float, shared: dict):
     return LightInstrument(out, {}), env
 
 
+_BLOOM_PARAMS = frozenset({"hue"})
+
+
 def _make_bloom(**params) -> LightSynth:
+    unknown = set(params) - _BLOOM_PARAMS
+    if unknown:                    # reject typo'd manifest params, don't discard them
+        raise KeyError(f"unknown bloom param(s) {sorted(unknown)} "
+                       f"(known: {sorted(_BLOOM_PARAMS)})")
     return LightSynth(voice_factory=_bloom_voice, max_voices=8,
                       shared={"hue": params.get("hue", 0.0)})
 
