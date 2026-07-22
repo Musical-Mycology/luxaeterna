@@ -24,10 +24,11 @@ _throttle = ThrottledLog(log)
 
 
 class LightSession:
-    def __init__(self, cap: SurfaceCapability, clock=time.monotonic) -> None:
+    def __init__(self, cap: SurfaceCapability, clock=time.monotonic,
+                 midi_capacity: int = 256) -> None:
         self.cap = cap
         self._clock = clock
-        self._queue = EventQueue()
+        self._queue = EventQueue(midi_capacity=midi_capacity)
         self._bridge = O2Bridge(lambda packed: self._queue.put(MidiEvent(packed)))
         self._director = StatusDirector(cap)
         self._engine = LightEngine(cap)
@@ -86,6 +87,10 @@ class LightSession:
 
         for ev in self._queue.drain():
             self._apply(ev)
+        dropped = self._queue.take_dropped()
+        if dropped:
+            _throttle.log("midi-overflow", logging.WARNING,
+                          "MIDI lane overflow: %d events dropped", dropped)
 
         bindings, gain = self._director.frame(dt)
         failed = self._engine.render_into(universe, bindings, t, dt,
@@ -119,8 +124,9 @@ class LightSession:
 
 
 def build_session(manifest: LightManifest, cap: SurfaceCapability,
-                  clock=time.monotonic) -> LightSession:
+                  clock=time.monotonic,
+                  midi_capacity: int = 256) -> LightSession:
     """Construct a session with the initial bit swap already enqueued."""
-    session = LightSession(cap, clock=clock)
+    session = LightSession(cap, clock=clock, midi_capacity=midi_capacity)
     session.swap(manifest)
     return session
