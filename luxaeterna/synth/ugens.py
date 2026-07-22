@@ -1,5 +1,5 @@
-"""Lux Aeterna — the light-uGen vocabulary (control-rate primitives here;
-field-rate primitives appended in a later task)."""
+"""Lux Aeterna — the light-uGen vocabulary (control-rate primitives, then
+field-rate primitives that render a whole zone per frame)."""
 
 from __future__ import annotations
 
@@ -157,3 +157,91 @@ class NoteTrigger(LightUgen):
         else:
             self._value = 0.0
         return np.asarray(self._value)
+
+
+def _broadcast_color(color_val: np.ndarray, n: int, channels: int) -> np.ndarray:
+    c = np.asarray(color_val, dtype=float).reshape(-1)
+    if c.shape[0] < channels:        # pad (e.g. RGB color on RGBW surface)
+        c = np.concatenate([c, np.zeros(channels - c.shape[0])])
+    return np.tile(c[:channels], (n, 1))
+
+
+class SolidColor(LightUgen):
+    rate = "field"
+
+    def __init__(self, color) -> None:
+        super().__init__()
+        self._color = as_ugen(color)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        return _broadcast_color(self._color.render(ctx), ctx.n, ctx.channels)
+
+
+class Gradient(LightUgen):
+    rate = "field"
+
+    def __init__(self, stops) -> None:
+        super().__init__()
+        self._pos = np.asarray([s[0] for s in stops], dtype=float)
+        self._cols = np.asarray([s[1] for s in stops], dtype=float)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        out = np.empty((ctx.n, ctx.channels))
+        for ch in range(ctx.channels):
+            col = self._cols[:, ch] if ch < self._cols.shape[1] else np.zeros(len(self._pos))
+            out[:, ch] = np.interp(ctx.positions, self._pos, col)
+        return out
+
+
+class PaletteMap(LightUgen):
+    rate = "field"
+
+    def __init__(self, index, palette) -> None:
+        super().__init__()
+        self._index = as_ugen(index)
+        self._palette = np.asarray(palette, dtype=float)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        idx = float(np.asarray(self._index.render(ctx)))
+        m = self._palette.shape[0]
+        pos = np.clip(idx, 0.0, 1.0) * (m - 1)
+        lo, hi = int(np.floor(pos)), min(int(np.ceil(pos)), m - 1)
+        frac = pos - lo
+        color = self._palette[lo] * (1 - frac) + self._palette[hi] * frac
+        return _broadcast_color(color, ctx.n, ctx.channels)
+
+
+class Bloom(LightUgen):
+    """Gaussian bloom around ``center`` that widens and brightens with ``level``."""
+
+    rate = "field"
+
+    def __init__(self, level, color, center: float = 0.5) -> None:
+        super().__init__()
+        self._level = as_ugen(level)
+        self._color = as_ugen(color)
+        self._center = float(center)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        level = float(np.asarray(self._level.render(ctx)))
+        color = np.asarray(self._color.render(ctx), dtype=float).reshape(-1)[:ctx.channels]
+        width = 0.08 + 0.5 * level
+        falloff = np.exp(-((ctx.positions - self._center) / width) ** 2)
+        intensity = np.clip(level * falloff, 0.0, 1.0)
+        return intensity[:, None] * color[None, :]
+
+
+class Noise(LightUgen):
+    rate = "field"
+
+    def __init__(self, color, scale: float, speed: float) -> None:
+        super().__init__()
+        self._color = as_ugen(color)
+        self._scale = float(scale)
+        self._speed = float(speed)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        phase = ctx.positions * self._scale + ctx.time * self._speed
+        intensity = 0.5 + 0.5 * np.sin(2 * np.pi * phase)
+        color = np.asarray(self._color.render(ctx), dtype=float).reshape(-1)[:ctx.channels]
+        return np.clip(intensity[:, None] * color[None, :], 0.0, 1.0)
