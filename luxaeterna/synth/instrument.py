@@ -33,6 +33,10 @@ class LightInstrument:
             raise KeyError(f"no param {name!r} on instrument")
         self.params[name].set(value)
 
+    def param_names(self) -> set[str]:
+        """Known param names — the dests a cc lane may target via .set()."""
+        return set(self.params)
+
     def render(self, ctx: RenderContext) -> np.ndarray:
         return self.output.render(ctx)
 
@@ -73,6 +77,10 @@ class LightSynth:
             raise KeyError(
                 f"no shared param {name!r} on synth (known: {sorted(self.shared)})")
         self.shared[name] = value
+
+    def param_names(self) -> set[str]:
+        """Known param names — the declared shared-param keys a cc lane may target."""
+        return set(self.shared)
 
     def render(self, ctx: RenderContext) -> np.ndarray:
         out = np.zeros((ctx.n, ctx.channels))
