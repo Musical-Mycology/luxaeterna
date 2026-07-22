@@ -334,6 +334,35 @@ class LightManifest:
 - **o2litepy dependency:** o2litepy remains caller-supplied (not a declared
   dependency); the contract test pins the API shape we rely on.
 
+## 11.1 Upstream alignment (verified 2026-07-22 against arco@498e4ab)
+
+Synced `rbdannenberg/arco` `origin/main` (commit `498e4ab`, the Serpent→Python
+pyarco port, 2026-07-17) and re-verified:
+
+- **arco now vendors o2litepy** (`arco/o2litepy/o2lite.py`) — the copy device
+  apps will most likely import. Contract identical to the o2-repo copy this
+  spec pins: 5-required-arg `method_new`, `handler(address, types, info)`
+  dispatch, append-only handler list, first-match-wins, **no removal API**.
+  Attach-once is double-confirmed.
+- **pyarco's epoch mechanism** (`doc/pyarco.md`): on Arco reset, all ugen IDs
+  are invalidated via an epoch number and `arco_ref()` raises on stale-epoch
+  access. This is upstream solving the same problem our swap lifecycle solves —
+  stale references from a previous era must never be dereferenced. Ours
+  resolves it structurally (whole graph dropped at swap; pure in-process), the
+  correct analog since we have no cross-process shadow objects.
+- **Arco's reset flow** (`doc/server.md`): `/arco/reset` frees all ugens →
+  `/actl/reset` → client re-initializes from scratch — the same
+  re-initialize-don't-patch shape as our reconnect → IDLE → Control re-sends
+  the manifest.
+- **Caution:** o2litepy `print()`s to stdout for every message to an unmatched
+  address. Not ours to fix, but a mis-agreed address between Control and the
+  device would emit per-message stdout writes on a real-time device — the
+  contract test pins `/light/midi` for this reason too.
+- pyarco's new `Synth` keeps a `free_notes` recycling pool because audio voice
+  creation costs O2 round-trips to build server-side graphs. Light voices are
+  cheap in-process objects, so LightSynth's create-per-note remains correct
+  (YAGNI on pooling).
+
 ## 12. Sources
 
 - Latency/memory review findings — this session, 2026-07-22 (o2litepy API
