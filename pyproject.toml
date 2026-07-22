@@ -16,8 +16,9 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 serial = ["pyserial>=3.5"]
-all = ["pyserial>=3.5"]
-dev = ["pytest>=7", "numpy>=1.24"]
+websim = ["websockets>=13"]
+all = ["pyserial>=3.5", "websockets>=13"]
+dev = ["pytest>=7", "numpy>=1.24", "websockets>=13"]
 
 [tool.setuptools.packages.find]
 include = ["luxaeterna*"]
