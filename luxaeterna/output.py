@@ -107,7 +107,14 @@ class OutputLoop:
         without the background thread.
         """
         if self.on_frame is not None:
-            self.on_frame(self.universe)
+            try:
+                self.on_frame(self.universe)
+            except Exception as exc:
+                if self.on_error:
+                    self.on_error(exc)
+                else:
+                    log.error("on_frame hook error on universe %d: %s",
+                              self.universe.universe_id, exc)
 
         if self.always_send or self.universe.dirty:
             try:

@@ -6,7 +6,11 @@ since o2lite lacks O2's native 'm' MIDI type.
 
 from __future__ import annotations
 
+import logging
+
 from .binding import ActiveBinding
+
+log = logging.getLogger(__name__)
 
 
 def decode_midi(packed: int) -> tuple[int, int, int]:
@@ -40,8 +44,11 @@ class O2Bridge:
         self.bindings = bindings
 
     def on_midi(self, packed: int) -> None:
-        status, d1, d2 = decode_midi(packed)
-        dispatch_midi(self.bindings, status, d1, d2)
+        try:
+            status, d1, d2 = decode_midi(packed)
+            dispatch_midi(self.bindings, status, d1, d2)
+        except Exception as exc:
+            log.warning("dropped MIDI packet %r: %s", packed, exc)
 
     def attach(self, o2lite_client, address: str = "/light/midi") -> None:
         """Subscribe on_midi to an o2lite address. Thin transport glue; the

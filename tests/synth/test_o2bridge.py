@@ -46,3 +46,11 @@ def test_note_off_via_bridge_releases_and_prunes_the_voice():
     for f in range(5, 20):
         binding.render(_ctx(f))                         # advance past the 0.4s release
     assert not binding.obj.voices                       # released + pruned -> note-off worked
+
+
+def test_on_midi_swallows_route_exceptions():
+    class _BoomBinding:
+        routes = {"note": (lambda *a: (_ for _ in ()).throw(RuntimeError("bad route")))}
+        obj = object()
+    bridge = O2Bridge([_BoomBinding()])
+    bridge.on_midi((0x90 << 16) | (60 << 8) | 127)   # must NOT raise
