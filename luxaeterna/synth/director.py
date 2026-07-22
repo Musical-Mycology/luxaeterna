@@ -79,8 +79,15 @@ class StatusDirector:
         self._set_signature(registry.build("sys:closing"))
 
     def _resolve_and_load(self, manifest: LightManifest) -> None:
+        # The welcome signature builds inside the same guard as the bindings:
+        # a bad welcome (unknown instrument, typo'd param — rejected since the
+        # registry validates params) is a resolve failure like any other.
         try:
             bindings = [resolve(d, self.cap) for d in manifest.instruments]
+            w = manifest.welcome
+            welcome_sig = (Signature(registry.build(w.instrument, **w.params),
+                                     w.duration)
+                           if w is not None else None)
         except Exception as exc:
             log.warning("manifest resolve failed (bit=%r role=%r): %s",
                         manifest.bit_name, manifest.role, exc)
@@ -91,10 +98,8 @@ class StatusDirector:
         self.bit_name = manifest.bit_name
         self.role = manifest.role
         self.state = LOADING
-        w = manifest.welcome
-        if w is not None:
-            self._set_signature(
-                Signature(registry.build(w.instrument, **w.params), w.duration))
+        if welcome_sig is not None:
+            self._set_signature(welcome_sig)
         else:
             self._set_signature(registry.build("sys:loaded"))
 

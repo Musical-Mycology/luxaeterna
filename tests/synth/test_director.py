@@ -170,3 +170,18 @@ def test_quarantine_then_error_escalation():
         d.note_failures([b])
     assert not d.bit_bindings
     assert d.state == ERROR
+
+
+def test_bad_welcome_is_a_resolve_failure_not_an_escape():
+    # A typo'd welcome param is rejected by the registry factory (main's
+    # param validation); the director must route it to ERROR like any other
+    # resolve failure — never let it escape into the render loop.
+    m = LightManifest.from_dict({
+        "instruments": [{"instrument": "bloom", "target": "primary"}],
+        "welcome": {"instrument": "bloom", "params": {"heu": 0.1},
+                    "duration": 0.3}})
+    d = _mk()
+    d.swap(m)                                        # must not raise
+    assert d.state == ERROR
+    _run(d, 2.0)                                     # sys:error plays out
+    assert d.state == IDLE
