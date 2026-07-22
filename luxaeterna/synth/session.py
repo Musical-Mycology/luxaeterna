@@ -86,6 +86,10 @@ class LightSession:
 
         for ev in self._queue.drain():
             self._apply(ev)
+        dropped = self._queue.take_dropped()
+        if dropped:
+            _throttle.log("midi-overflow", logging.WARNING,
+                          "MIDI lane overflow: %d events dropped", dropped)
 
         bindings, gain = self._director.frame(dt)
         failed = self._engine.render_into(universe, bindings, t, dt,

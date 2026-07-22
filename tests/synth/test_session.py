@@ -3,7 +3,13 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
+from luxaeterna.logutil import ThrottledLog
+from luxaeterna.synth import session as session_module
 from luxaeterna.synth.capability import shroom_capability
+from luxaeterna.synth.events import MidiEvent
 from luxaeterna.synth.manifest import LightManifest
 from luxaeterna.synth.session import LightSession, build_session
 from luxaeterna.universe import Universe
@@ -74,3 +80,38 @@ def test_build_session_enqueues_initial_swap():
     uni = Universe()
     session.render_into(uni)
     assert session.state == "loading"
+
+
+def test_midi_flood_stays_inside_frame_budget_and_swap_survives():
+    # Review regression: 100k-event burst before one frame must neither blow
+    # the 44 Hz budget nor drop the queued SwapEvent.
+    session, uni = _mk()
+    session.swap(LightManifest.from_dict(MANIFEST))
+    packed = (0x90 << 16) | (60 << 8) | 127
+    for _ in range(100_000):
+        session._queue.put(MidiEvent(packed))
+    t0 = time.perf_counter()
+    session.render_into(uni)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 1.0 / 44.0, f"frame took {elapsed * 1000:.1f} ms"
+    assert session.state != "idle"           # the SwapEvent was applied
+    assert session._queue.drain() == []      # nothing carried to next frame
+
+
+def test_midi_overflow_warns_throttled(monkeypatch, caplog):
+    session, uni = _mk()
+    # Fresh throttle: the module-level one is shared process-wide.
+    monkeypatch.setattr(session_module, "_throttle",
+                        ThrottledLog(session_module.log))
+    session.swap(LightManifest.from_dict(MANIFEST))
+    packed = (0x90 << 16) | (60 << 8) | 127
+    with caplog.at_level(logging.WARNING, logger="luxaeterna.synth.session"):
+        for _ in range(1000):
+            session._queue.put(MidiEvent(packed))
+        session.render_into(uni)             # overflow logged once
+        for _ in range(1000):
+            session._queue.put(MidiEvent(packed))
+        session.render_into(uni)             # second overflow throttled
+    overflow = [r for r in caplog.records if "overflow" in r.getMessage()]
+    assert len(overflow) == 1
+    assert "744" in overflow[0].getMessage()   # 1000 - 256 dropped
