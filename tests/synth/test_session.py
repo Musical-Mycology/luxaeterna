@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
+from luxaeterna.constants import DMX_REFRESH_HZ
 from luxaeterna.logutil import ThrottledLog
 from luxaeterna.synth import session as session_module
 from luxaeterna.synth.capability import shroom_capability
@@ -82,6 +83,16 @@ def test_build_session_enqueues_initial_swap():
     assert session.state == "loading"
 
 
+def test_midi_capacity_passthrough():
+    cap = shroom_capability("ie3")
+    clk = iter([i * 0.02 for i in range(10)]).__next__
+    session = LightSession(cap, clock=clk, midi_capacity=4)
+    for i in range(10):
+        session._bridge.on_midi(i)
+    assert sum(isinstance(e, MidiEvent) for e in session._queue.drain()) == 4
+    assert session._queue.take_dropped() == 6
+
+
 def test_midi_flood_stays_inside_frame_budget_and_swap_survives():
     # Review regression: 100k-event burst before one frame must neither blow
     # the 44 Hz budget nor drop the queued SwapEvent.
@@ -93,7 +104,7 @@ def test_midi_flood_stays_inside_frame_budget_and_swap_survives():
     t0 = time.perf_counter()
     session.render_into(uni)
     elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0 / 44.0, f"frame took {elapsed * 1000:.1f} ms"
+    assert elapsed < 1.0 / DMX_REFRESH_HZ, f"frame took {elapsed * 1000:.1f} ms"
     assert session.state != "idle"           # the SwapEvent was applied
     assert session._queue.drain() == []      # nothing carried to next frame
 
