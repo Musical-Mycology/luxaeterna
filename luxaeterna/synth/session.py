@@ -41,6 +41,14 @@ class LightSession:
     def attach(self, o2lite_client, address: str = "/light/midi") -> None:
         self._bridge.attach(o2lite_client, address)
 
+    def feed_midi(self, status: int, data1: int, data2: int) -> None:
+        """Inject a MIDI message as if it arrived over o2lite — for device
+        simulators and tests that have no live o2lite client. Packed and
+        enqueued exactly like a real packet, so it is gated to RUNNING and
+        drained on the render thread like any other MIDI event."""
+        packed = ((status & 0xFF) << 16) | ((data1 & 0xFF) << 8) | (data2 & 0xFF)
+        self._bridge.on_midi(packed)
+
     # -- lifecycle (thread-safe: applied at the next frame boundary) --------
 
     def swap(self, manifest: LightManifest) -> None:
