@@ -66,6 +66,12 @@ class LightSynth:
             v[1].gate_off()
 
     def set(self, name: str, value) -> None:
+        # The initial ``shared`` dict declares the known params; reject typos so
+        # a bad manifest lane fails loudly instead of silently writing garbage
+        # (mirrors LightInstrument.set's strictness against self.params).
+        if name not in self.shared:
+            raise KeyError(
+                f"no shared param {name!r} on synth (known: {sorted(self.shared)})")
         self.shared[name] = value
 
     def render(self, ctx: RenderContext) -> np.ndarray:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from luxaeterna.synth.signal import RenderContext
 from luxaeterna.synth import registry, presets  # noqa: F401  (import registers presets)
 
@@ -39,3 +40,16 @@ def test_hue_set_recolors_new_voice():
     synth.noteon(60, 1.0, note_id=1)
     green = synth.render(ctx(0, dt=0.01))
     assert green[:, 1].max() > green[:, 0].max()      # more green than red -> .set() took effect
+
+
+def test_set_unknown_shared_param_raises():
+    synth = registry.build("bloom")
+    synth.set("hue", 0.5)                              # known param: fine
+    with pytest.raises(KeyError):
+        synth.set("hveu", 0.5)                         # typo -> must not silently write
+
+
+def test_make_bloom_rejects_unknown_param():
+    registry.build("bloom", hue=0.3)                  # known param: fine
+    with pytest.raises(KeyError):
+        registry.build("bloom", hveu=0.3)             # typo'd manifest param -> must raise
