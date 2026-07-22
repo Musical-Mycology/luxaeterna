@@ -65,6 +65,11 @@ class LightSynth:
         if v is not None:
             v[1].gate_off()
 
+    def all_notes_off(self) -> None:
+        """Gate off every active voice (releases play out, then prune)."""
+        for _inst, env in self.voices.values():
+            env.gate_off()
+
     def set(self, name: str, value) -> None:
         self.shared[name] = value
 
