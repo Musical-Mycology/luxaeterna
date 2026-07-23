@@ -7,7 +7,7 @@ import colorsys
 import numpy as np
 
 from . import registry
-from .ugens import Const, Envelope, Bloom
+from .ugens import Bloom, Const, Envelope, Fill, SegmentLevel
 from .instrument import LightInstrument, LightSynth
 
 
@@ -37,3 +37,19 @@ def _make_bloom(**params) -> LightSynth:
 
 
 registry.register("bloom", _make_bloom)
+
+
+_GLOW_PARAMS = frozenset({"hue"})
+
+
+def _make_glow(**params) -> LightInstrument:
+    unknown = set(params) - _GLOW_PARAMS
+    if unknown:                    # reject typo'd manifest params, don't discard them
+        raise KeyError(f"unknown glow param(s) {sorted(unknown)} "
+                       f"(known: {sorted(_GLOW_PARAMS)})")
+    color = hsv_to_rgb(float(params.get("hue", 0.0)), 1.0, 1.0)
+    level = SegmentLevel([(0.0, 0.0), (0.25, 1.0)])   # fade in over 0.25 s, then hold
+    return LightInstrument(Fill(level, Const(color)), {})
+
+
+registry.register("glow", _make_glow)
