@@ -123,6 +123,30 @@ class Envelope(LightUgen):
         return np.asarray(self._level)
 
 
+class SegmentLevel(LightUgen):
+    """Piecewise-linear level over local time (advanced by ctx.dt, memoized
+    per frame like Envelope). With ``loop_from`` set, time wraps back there
+    after the last point — blink-then-breathe patterns loop forever."""
+
+    rate = "control"
+
+    def __init__(self, points, loop_from: float | None = None) -> None:
+        super().__init__()
+        self._xs = np.asarray([p[0] for p in points], dtype=float)
+        self._ys = np.asarray([p[1] for p in points], dtype=float)
+        self._loop_from = loop_from
+        self._t = 0.0
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        self._t += ctx.dt
+        t = self._t
+        end = self._xs[-1]
+        if self._loop_from is not None and t > end:
+            span = end - self._loop_from
+            t = self._loop_from + ((t - self._loop_from) % span)
+        return np.asarray(np.interp(t, self._xs, self._ys))
+
+
 class CCReader(LightUgen):
     rate = "control"
 
@@ -176,6 +200,24 @@ class SolidColor(LightUgen):
 
     def _compute(self, ctx: RenderContext) -> np.ndarray:
         return _broadcast_color(self._color.render(ctx), ctx.n, ctx.channels)
+
+
+class Fill(LightUgen):
+    """level * color across every pixel — SolidColor with a brightness input."""
+
+    rate = "field"
+
+    def __init__(self, level, color) -> None:
+        super().__init__()
+        self._level = as_ugen(level)
+        self._color = as_ugen(color)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        level = float(np.asarray(self._level.render(ctx)))
+        c = np.asarray(self._color.render(ctx), dtype=float).reshape(-1)
+        if c.shape[0] < ctx.channels:
+            c = np.concatenate([c, np.zeros(ctx.channels - c.shape[0])])
+        return np.clip(level * np.tile(c[:ctx.channels], (ctx.n, 1)), 0.0, 1.0)
 
 
 class Gradient(LightUgen):

@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 from luxaeterna.synth import registry
 from luxaeterna.synth.signal import RenderContext
-from luxaeterna.synth.status import (ChannelSweep, Fill, GainSignature,
-                                     SegmentLevel, Signature, _sig_error)
-from luxaeterna.synth.ugens import Const
+from luxaeterna.synth.status import (ChannelSweep, GainSignature, Signature,
+                                     _sig_error)
+from luxaeterna.synth.ugens import Const, Fill, SegmentLevel
 
 
 def _ctx(f, dt=0.05, n=12, ch=3):
