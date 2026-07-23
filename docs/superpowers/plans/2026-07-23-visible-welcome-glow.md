@@ -4,9 +4,14 @@
 
 **Goal:** Give Bit authors a field-rate `glow` welcome instrument in luxaeterna that renders lit without a note, so a per-role welcome is actually visible for its whole LOADING window.
 
-**Architecture:** Pure vocabulary addition. luxaeterna gains one field-rate instrument (`Fill(SegmentLevel, Const(color))` wrapped as a `LightInstrument`) registered as `glow`; the director, welcome path, manifest schema, and `resolve` are untouched — the existing `Signature(registry.build(name, **params), duration)` welcome path already renders it. `Fill`/`SegmentLevel` are promoted from `status.py` to `ugens.py` first so `glow` can live in `presets.py` without a `presets → status` import. mm-terrarium then re-points TestBit's welcome at `glow` and tightens its smoke test.
+**Architecture:** Pure vocabulary addition. luxaeterna gains one field-rate instrument (`Fill(SegmentLevel, Const(color))` wrapped as a `LightInstrument`) registered as `glow`; the director, welcome path, manifest schema, and `resolve` are untouched — the existing `Signature(registry.build(name, **params), duration)` welcome path already renders it. `Fill`/`SegmentLevel` are promoted from `status.py` to `ugens.py` first so `glow` can live in `presets.py` without a `presets → status` import. mm-terrarium then re-points TestBit's welcome at `glow` and tightens its smoke test. A separate, independent phase adds a viewing-duration flag to the `harness/led_smoke.py` demo so it can be watched in a browser.
 
-**Tech Stack:** Python 3, numpy, pytest. Two repos: luxaeterna (renderer, primary) and mm-terrarium (consumer, follow-up).
+**Tech Stack:** Python 3, numpy, pytest, argparse. Two repos: luxaeterna (renderer, primary) and mm-terrarium (consumer).
+
+**Phases (three PRs):**
+- **Phase A — luxaeterna:** the `glow` instrument. Merges to luxaeterna `main`.
+- **Phase B — mm-terrarium `main`:** re-point TestBit's welcome at `glow` + tighten the smoke test. **Gated on Phase A merged** to luxaeterna `main`.
+- **Phase C — mm-terrarium `main`:** `harness/led_smoke.py` viewing-duration flag. **Independent** — needs only luxaeterna `main` as it already is (its `WebSimBackend`, merged via luxaeterna#6, is present today); no dependency on A or B. Executable at any time, in its own PR.
 
 ## Global Constraints
 
@@ -14,7 +19,8 @@
 - **`glow` param surface:** exactly `hue` (0–1 HSV). Unknown params raise `KeyError` — matching `bloom`'s `_make_bloom` strictness, which preserves luxaeterna's `test_bad_welcome_is_a_resolve_failure_not_an_escape` contract.
 - **No changes** to `director.py`, the welcome path, `manifest.py`, or `binding.py`. If a task seems to need one, stop — the design says it doesn't.
 - **`Fill`/`SegmentLevel`** are generic field/control primitives; after Task A1 they live in `ugens.py`. `ChannelSweep` stays in `status.py`.
-- **Repo sequencing:** Phase A (luxaeterna) must merge before Phase B (mm-terrarium) — mm-terrarium imports luxaeterna as an editable install from `/Users/chris/projects/luxaeterna`, so `glow` is only importable once it lands there. Instrument names are **opaque to Control** (`control/role_config.py::_validate_welcome` validates welcome *structure*, not names), so re-pointing the welcome needs no Control-side changes.
+- **Repo sequencing:** Phase A (luxaeterna) must merge before Phase B (mm-terrarium) — mm-terrarium imports luxaeterna as an editable install from `/Users/chris/projects/luxaeterna`, so `glow` is only importable once it lands on that checkout's `main`. Instrument names are **opaque to Control** (`control/role_config.py::_validate_welcome` validates welcome *structure*, not names), so re-pointing the welcome needs no Control-side changes. **Phase C has no such gate** — it uses only `WebSimBackend`/`feed_midi`, already on luxaeterna `main`.
+- **mm-terrarium test command (Phases B & C):** the Slice-1 harness landed on `main` (PR mm-terrarium#6, HEAD `de2a6aa`). Run from the mm-terrarium checkout root with its own `.venv`: `.venv/bin/python -m pytest tests -q`. Tests `importorskip("luxaeterna.backends.websim")`, so a checkout without luxaeterna installed skips them rather than failing.
 
 ---
 
@@ -337,14 +343,17 @@ git commit -m "test(synth): glow welcome renders lit during LOADING (regression 
 
 ---
 
-# Phase B — mm-terrarium (cross-repo follow-up)
+# Phase B — mm-terrarium `main` (cross-repo follow-up)
 
-> **Separate execution session, gated on Phase A merged.** These tasks run in the mm-terrarium checkout that carries `tests/test_led_smoke.py` and the Slice-1 `TestBit` — currently the worktree `/Users/chris/projects/mm-terrarium/.claude/worktrees/bits-game-launching-engine-d8d579` (branch `claude/mm-tuneshroom-test-approach-11a21c`). Confirm the exact branch with the user at execution time. Use that worktree's own `.venv`.
+> **Separate execution session in `~/projects/mm-terrarium`, gated on Phase A merged.** The Slice-1 harness — `tests/test_led_smoke.py`, `harness/`, and the `bloom`-welcome `TestBit` — is already on `main` (PR mm-terrarium#6, HEAD `de2a6aa`). Branch off `main` (e.g. `claude/welcome-glow`) and open a PR back to `main`.
 
 **Phase B precondition — verify `glow` is importable before starting:**
 
-Run (from the mm-terrarium worktree cwd): `.venv/bin/python -c "from luxaeterna.synth import registry; assert 'glow' in registry._REGISTRY, 'glow not available — merge luxaeterna Phase A first'; print('glow available')"`
-Expected: `glow available`. If it asserts, stop — Phase A is not yet installed.
+1. Ensure the luxaeterna editable checkout reflects the merged Phase A:
+   `git -C ~/projects/luxaeterna checkout main && git -C ~/projects/luxaeterna pull`
+2. Run (from the mm-terrarium checkout root): `.venv/bin/python -c "from luxaeterna.synth import registry; assert 'glow' in registry._REGISTRY, 'glow not available — merge luxaeterna Phase A first'; print('glow available')"`
+
+Expected: `glow available`. If it asserts, stop — Phase A is not yet merged/installed.
 
 ## Task B1: Tighten the smoke-test LOADING assertion (red)
 
@@ -430,9 +439,202 @@ git commit -m "feat(test-bit): point the welcome at glow so the LOADING window i
 
 ---
 
+# Phase C — mm-terrarium `main` (independent PR)
+
+> **Separate execution session in `~/projects/mm-terrarium`. No gate on Phase A/B** — this uses only `WebSimBackend`/`feed_midi`, already on luxaeterna `main` (luxaeterna#6). Branch off `main` (e.g. `claude/led-smoke-duration-flag`), open a PR back to `main`. Purely a viewing-ergonomics change to the demo script; no stack behavior changes.
+
+**Precondition — confirm the demo's dependency is importable:**
+
+Run (from the mm-terrarium checkout root): `.venv/bin/python -c "import luxaeterna.backends.websim; print('websim available')"`
+Expected: `websim available`. (If it errors, run the editable install from `requirements-dev.txt`.)
+
+## Task C1: `--seconds` / `--hold` viewing-duration flag for the LED-sim demo
+
+`harness/led_smoke.py` is a fixed ~5 s one-shot (TestBit's natural 2 s run + fade), and its web server is a daemon thread that dies when the process exits — so a human can't switch to a browser before it's gone. Add flags to keep it up: `--seconds N` (sweep N s then complete + fade), `--hold` (serve until Ctrl-C), plus `--host`/`--port`. Default (no flag) preserves today's behavior. The one lever: `GameServer` maps a name to a **callable**, so registering `lambda: TestBit(run_duration=…)` sets the Bit's lifetime; `run_duration=float('inf')` never completes. Extract a `build()` helper (mirroring luxaeterna's `build_demo`) so the pure parts are testable without a live server.
+
+**Files:**
+- Modify: `harness/led_smoke.py` (add `argparse`; add `build()` + `_run_duration()`; rewrite `main()` to parse flags; update the module docstring)
+- Create: `tests/test_led_smoke_cli.py`
+
+**Interfaces:**
+- Consumes: `TestBit(run_duration=…)` and `RUN_DURATION_SECONDS` from `bits.test_bit` (`RUN_DURATION_SECONDS = 2.0`, `TestBit.__init__(run_duration=RUN_DURATION_SECONDS)` already exist — no change to `test_bit.py`); `DeviceBridge(capability=None, clock=time.monotonic)`, `WebSimBackend(capability, host, port, serve)`, `GameServer`, `OutputLoop`, `shroom_capability`, `Universe`, `State` — all already imported by `led_smoke.py`.
+- Produces: `build(run_duration, host="127.0.0.1", port=8770, serve=True, clock=time.monotonic) -> (loop, session, gs)`; `_run_duration(args) -> float`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/test_led_smoke_cli.py`:
+
+```python
+"""CLI/plumbing tests for the led_smoke demo: the arg->duration mapping and a
+headless pipeline build. The live server + real-clock loop in main() is covered
+by manual acceptance, not here."""
+
+from __future__ import annotations
+
+import argparse
+
+import pytest
+
+pytest.importorskip("luxaeterna.backends.websim")
+
+from bits.test_bit import RUN_DURATION_SECONDS
+from control.state import State
+from harness.led_smoke import _run_duration, build
+
+
+def _args(seconds=None, hold=False):
+    return argparse.Namespace(seconds=seconds, hold=hold)
+
+
+def test_run_duration_hold_is_infinite():
+    assert _run_duration(_args(hold=True)) == float("inf")
+
+
+def test_run_duration_seconds_overrides():
+    assert _run_duration(_args(seconds=12.0)) == 12.0
+
+
+def test_run_duration_default_is_test_bit_natural():
+    assert _run_duration(_args()) == RUN_DURATION_SECONDS
+
+
+def test_build_constructs_headless_pipeline():
+    loop, session, gs = build(run_duration=float("inf"), serve=False)
+    assert isinstance(gs.state, State)           # a real GameServer wired up
+    assert callable(session.render_into)         # luxaeterna session ready to render
+    assert loop is not None
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `.venv/bin/python -m pytest tests/test_led_smoke_cli.py -q`
+Expected: FAIL at import — `ImportError: cannot import name '_run_duration' from 'harness.led_smoke'` (and `build`), because neither exists yet.
+
+- [ ] **Step 3: Implement `build()`, `_run_duration()`, and the flags in `harness/led_smoke.py`**
+
+Replace the module docstring, imports, and `main()` with:
+
+```python
+"""python -m harness.led_smoke — drive TestBit through the in-process stack and
+watch it on the Web LED simulator.
+
+Requires luxaeterna[websim] installed editable (see requirements-dev.txt):
+    python -m pip install -e "/Users/chris/projects/luxaeterna[websim]"
+
+By default the demo runs TestBit's natural ~2 s lifecycle then exits. To watch it
+in a browser, keep it up longer:
+    python -m harness.led_smoke --hold          # serve until Ctrl-C
+    python -m harness.led_smoke --seconds 15    # sweep ~15 s, then complete + fade
+    python -m harness.led_smoke --host 0.0.0.0 --port 9000
+"""
+
+from __future__ import annotations
+
+import argparse
+import time
+
+from bits.test_bit import RUN_DURATION_SECONDS, TestBit
+from control.engine import GameServer
+from control.state import State
+from harness.device_bridge import DeviceBridge
+from luxaeterna.backends.websim import WebSimBackend
+from luxaeterna.output import OutputLoop
+from luxaeterna.synth.capability import shroom_capability
+from luxaeterna.universe import Universe
+
+HOST, PORT = "127.0.0.1", 8770
+
+
+def build(run_duration: float, host: str = HOST, port: int = PORT,
+          serve: bool = True, clock=time.monotonic):
+    """Construct the demo pipeline WITHOUT starting the loop.
+
+    Returns ``(loop, session, gs)``. ``run_duration`` is threaded into TestBit
+    via a factory so the Bit's RUNNING window is caller-controlled
+    (``float('inf')`` = never completes). ``serve=False`` gives a record-only
+    backend (no websockets, no port) for headless tests."""
+    gs = GameServer({"test_bit": lambda: TestBit(run_duration=run_duration)})
+    cap = shroom_capability()
+    bridge = DeviceBridge(capability=cap, clock=clock)
+    gs.on_release = bridge.on_release
+    gs.load_bit("test_bit")
+    session = bridge.on_grant(gs.join("sim-dev", "TEST_PLAYER_NODE"))
+    uni = Universe()
+    backend = WebSimBackend(capability=cap, host=host, port=port, serve=serve)
+    loop = OutputLoop(uni, backend, on_frame=session.render_into, always_send=True)
+    return loop, session, gs
+
+
+def _run_duration(args) -> float:
+    if args.hold:
+        return float("inf")
+    return RUN_DURATION_SECONDS if args.seconds is None else args.seconds
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description="Watch TestBit render on the Web LED simulator.")
+    ap.add_argument("--seconds", type=float, default=None,
+                    help="Keep the Bit RUNNING/sweeping this long before it "
+                         "completes + fades (default: TestBit's natural ~2 s).")
+    ap.add_argument("--hold", action="store_true",
+                    help="Serve until Ctrl-C (never auto-complete).")
+    ap.add_argument("--host", default=HOST)
+    ap.add_argument("--port", type=int, default=PORT)
+    args = ap.parse_args()
+
+    loop, session, gs = build(_run_duration(args), args.host, args.port)
+    loop.start()
+    print(f"Watch the Shroom at http://{args.host}:{args.port}/  (Ctrl-C to stop)")
+
+    gs.run()
+    try:
+        while session.state != "running":
+            time.sleep(0.02)
+        cc = 0
+        while gs.state == State.RUNNING:
+            session.feed_midi(0xB0, 74, cc)          # cc:74 -> hue
+            session.feed_midi(0x90, 60, 100)         # new voice at current hue
+            cc = (cc + 8) % 128
+            gs.tick(0.15)                            # advances TestBit toward complete
+            time.sleep(0.15)
+        time.sleep(1.2)                              # let the closing fade + idle play
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 4: Run the CLI tests to verify they pass**
+
+Run: `.venv/bin/python -m pytest tests/test_led_smoke_cli.py -q`
+Expected: `4 passed`
+
+- [ ] **Step 5: Run the full mm-terrarium suite — the existing regression is untouched**
+
+Run: `.venv/bin/python -m pytest tests -q`
+Expected: all pass, 0 skipped. `tests/test_led_smoke.py` builds its pipeline manually (not via `main()`/`build()`), so it is unaffected by this refactor.
+
+- [ ] **Step 6: Manual acceptance (the point of the change)**
+
+Run: `.venv/bin/python -m harness.led_smoke --hold`, open `http://127.0.0.1:8770/`, confirm the ring + stem light and the hue sweeps continuously, then `Ctrl-C` (stops cleanly). Spot-check `--seconds 15` (runs ~15 s then fades) and no-flag (today's ~2 s one-shot). Note: if Phase B has merged, the welcome is now lit (glow) rather than dark — expected, not a regression.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add harness/led_smoke.py tests/test_led_smoke_cli.py
+git commit -m "feat(harness): --seconds/--hold viewing-duration flags for led_smoke demo"
+```
+
+---
+
 ## Self-Review (completed during authoring)
 
-**Spec coverage** — every §-requirement maps to a task:
+**Spec coverage** — every §-requirement of the glow spec maps to a task:
 - §5.1 (promote `Fill`/`SegmentLevel`) → Task A1.
 - §5.2 (`glow` instrument: full-field, `hue`, fade-in-hold, reject-unknown-param) → Task A2.
 - §5.3 (TestBit welcome → `glow`; tighten smoke test) → Tasks B2, B1.
@@ -440,6 +642,10 @@ git commit -m "feat(test-bit): point the welcome at glow so the LOADING window i
 - §7 (alternatives) — no task needed (rejected approaches).
 - §8 decisions — enforced by Global Constraints + task scopes.
 
+**Phase C coverage** — the led_smoke handoff's acceptance criteria (§9) map to Task C1: `--hold`/`--seconds`/default → `_run_duration` + tests; `--host`/`--port` → argparse; deterministic mapping test + headless `build()` test → `tests/test_led_smoke_cli.py`; existing regression untouched → C1 step 5; docstring/README → C1 step 3 docstring; PR → C1 process note. `bits/test_bit.py` is **not** modified in Phase C (the `run_duration` param already exists) — so C touches disjoint files from B (`harness/led_smoke.py` + new CLI test vs `bits/test_bit.py` + `tests/test_led_smoke.py`), and the two PRs don't collide.
+
+**Corrections applied** — Phase B was retargeted from the (now-merged) Slice-1 worktree to mm-terrarium `main` (PR mm-terrarium#6, HEAD `de2a6aa`, carries the harness + `bloom` welcome); the current `main` `tests/test_led_smoke.py` still has the `loading_frames > 10` workaround at lines 38–69, so B1's replacement is accurate.
+
 **Placeholder scan** — none; every code step shows complete, paste-ready content.
 
-**Type consistency** — `_make_glow(**params) -> LightInstrument` and the registry name `"glow"` are used identically in A2 (definition), A3 (director welcome), and B2 (TestBit welcome). `Fill(level, color)` / `SegmentLevel(points, loop_from=None)` signatures match their A1 source. `RenderContext(time, frame, dt, positions, n, channels)` matches `signal.py`.
+**Type consistency** — `_make_glow(**params) -> LightInstrument` and the registry name `"glow"` are used identically in A2 (definition), A3 (director welcome), and B2 (TestBit welcome). `Fill(level, color)` / `SegmentLevel(points, loop_from=None)` signatures match their A1 source. `RenderContext(time, frame, dt, positions, n, channels)` matches `signal.py`. For Phase C: `build(run_duration, host, port, serve, clock)` and `_run_duration(args)` are defined and imported with matching names/signatures in C1's implementation and `tests/test_led_smoke_cli.py`; `DeviceBridge(capability, clock)`, `WebSimBackend(capability, host, port, serve)`, and `State` match the current `main` sources verified during authoring.
