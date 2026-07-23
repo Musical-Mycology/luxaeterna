@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 from luxaeterna.synth.capability import shroom_capability
 from luxaeterna.synth.director import (CLOSING, DISCONNECTED, ERROR, IDLE,
                                        LOADING, QUARANTINE_FRAMES, RUNNING,
                                        SELFTEST, StatusDirector)
 from luxaeterna.synth.manifest import LightManifest
+from luxaeterna.synth.signal import RenderContext
 
 MANIFEST = LightManifest.from_dict({
     "bit_name": "testbit", "role": "melody",
@@ -185,3 +188,21 @@ def test_bad_welcome_is_a_resolve_failure_not_an_escape():
     assert d.state == ERROR
     _run(d, 2.0)                                     # sys:error plays out
     assert d.state == IDLE
+
+
+def test_glow_welcome_renders_lit():
+    # A welcome must actually light the surface during LOADING. Counterpoint to
+    # test_welcome_replaces_generic_loaded: a bare `bloom` welcome is a note-
+    # triggered synth with no voice, so it renders dark; a `glow` welcome is a
+    # field-rate gesture that renders without a note.
+    m = LightManifest.from_dict({
+        "instruments": [{"instrument": "bloom", "target": "primary"}],
+        "welcome": {"instrument": "glow", "params": {"hue": 0.33},
+                    "duration": 0.5}})
+    d = _mk()
+    d.swap(m)
+    assert d.state == LOADING
+    ctx = RenderContext(time=0.0, frame=0, dt=0.05,
+                        positions=np.linspace(0, 1, 12), n=12, channels=3)
+    out = d._sig_binding.render(ctx)
+    assert out.max() > 0.0                       # the welcome pathway is lit
