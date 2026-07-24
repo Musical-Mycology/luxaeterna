@@ -1,5 +1,16 @@
 """Lux Aeterna — O2 input bridge: decode packed-int32 MIDI and dispatch to bindings.
 
+O2 is *an* input path, not *the* input path. This bridge serves the deployments
+where the renderer is in a different process from whatever is driving it — a
+Tuneshroom, or a split-out Terrarium renderer — and each note/CC costs 2 hops
+(Control -> Arco -> renderer). When the renderer lives in the driver's own
+process (today's Terrarium, where Control constructs the LightSession
+in-process), MIDI arrives by direct call via LightSession.feed_midi() and
+attach() is never called: addressing an o2lite service from inside the process
+that offers it would round-trip through the O2 host for nothing. See
+docs/deployment.md. decode_midi/dispatch_midi below are transport-agnostic and
+serve both paths.
+
 Wire format (ratified): one int32 = (status << 16) | (data1 << 8) | data2,
 since o2lite lacks O2's native 'm' MIDI type.
 
@@ -53,8 +64,13 @@ def dispatch_midi(bindings, status: int, d1: int, d2: int) -> None:
 
 
 class O2Bridge:
-    """Receives packed-int32 MIDI from o2lite and enqueues it for the render
-    thread; decode/dispatch runs later, at drain time."""
+    """Receives packed-int32 MIDI and enqueues it for the render thread;
+    decode/dispatch runs later, at drain time.
+
+    on_midi() is the transport-neutral entry point — an attached o2lite handler
+    and an in-process caller both land here, and everything downstream is
+    identical. attach() is only for the cross-process and on-device
+    deployments; in-process consumers skip it entirely (docs/deployment.md)."""
 
     def __init__(self, enqueue: Callable[[int], None]) -> None:
         self._enqueue = enqueue

@@ -20,6 +20,12 @@ class ArtNet(DMXBackend):
         specific node IP for unicast.
     port : int
         UDP port (default 6454).
+
+    Note
+    ----
+    Art-Net is UDP on the LAN, so a NAT'd VM or WSL2 host cannot reach WLED
+    controllers — its virtual NIC sits on its own subnet. Develop without
+    hardware using ``WebSimBackend`` instead; see ``docs/deployment.md``.
     """
 
     def __init__(self, host: str = "255.255.255.255", port: int = ARTNET_PORT) -> None:

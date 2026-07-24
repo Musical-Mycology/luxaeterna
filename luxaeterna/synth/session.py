@@ -1,10 +1,13 @@
 """Lux Aeterna — LightSession: the attach-once facade.
 
-Owns the event queue, O2 bridge, status director, and engine. The o2lite
-handler is registered exactly once per process and closes over this session —
-never over bindings — so bit swaps can never leak into o2litepy's append-only
-handler table. All graph mutation happens on the render thread at frame
-boundaries (queue drain)."""
+Owns the event queue, O2 bridge, status director, and engine. Input reaches the
+queue by either of two paths, depending on where the session is deployed
+(docs/deployment.md): direct calls — feed_midi() and the lifecycle methods —
+when the session lives in the driver's own process, or o2lite when it does not.
+Where attach() is used, the o2lite handler is registered exactly once per
+process and closes over this session — never over bindings — so bit swaps can
+never leak into o2litepy's append-only handler table. All graph mutation happens
+on the render thread at frame boundaries (queue drain), on both paths."""
 
 from __future__ import annotations
 
@@ -39,13 +42,20 @@ class LightSession:
     # -- wiring (once, at device startup) -----------------------------------
 
     def attach(self, o2lite_client, address: str = "/light/midi") -> None:
+        """Wire this session to an o2lite client — for the deployments where the
+        driver is in another process (a Tuneshroom, or a split-out Terrarium
+        renderer). Do not call it when the driver constructs this session
+        in-process: use feed_midi() instead, or the message round-trips through
+        the O2 host to reach a caller it shares a process with."""
         self._bridge.attach(o2lite_client, address)
 
     def feed_midi(self, status: int, data1: int, data2: int) -> None:
-        """Inject a MIDI message as if it arrived over o2lite — for device
-        simulators and tests that have no live o2lite client. Packed and
-        enqueued exactly like a real packet, so it is gated to RUNNING and
-        drained on the render thread like any other MIDI event."""
+        """Feed a MIDI message in by direct call — the input path for
+        in-process consumers (today's Terrarium, where Control constructs the
+        session itself), and for device simulators and tests with no live
+        o2lite client. Packed and enqueued exactly like a packet off the wire,
+        so it is gated to RUNNING and drained on the render thread like any
+        other MIDI event."""
         packed = ((status & 0xFF) << 16) | ((data1 & 0xFF) << 8) | (data2 & 0xFF)
         self._bridge.on_midi(packed)
 
