@@ -3,6 +3,7 @@ field-rate primitives that render a whole zone per frame)."""
 
 from __future__ import annotations
 
+import colorsys
 import math
 
 import numpy as np
@@ -23,6 +24,25 @@ class Const(LightUgen):
 
     def _compute(self, ctx: RenderContext) -> np.ndarray:
         return self._value
+
+
+def hsv_to_rgb(h: float, s: float, v: float) -> np.ndarray:
+    return np.asarray(colorsys.hsv_to_rgb(h % 1.0, s, v), dtype=float)
+
+
+class HueColor(LightUgen):
+    """Live hue (0–1) -> fully-saturated RGB, recomputed each frame. Lets a
+    colour follow a control input (e.g. a Smooth-ed cc lane) instead of being
+    frozen into a Const at construction."""
+
+    rate = "control"
+
+    def __init__(self, hue) -> None:
+        super().__init__()
+        self._hue = as_ugen(hue)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        return hsv_to_rgb(float(np.asarray(self._hue.render(ctx))), 1.0, 1.0)
 
 
 class Smooth(LightUgen):

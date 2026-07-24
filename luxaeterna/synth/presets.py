@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import colorsys
-
 import numpy as np
 
 from . import registry
-from .ugens import Bloom, Const, Envelope, Fill, SegmentLevel
+from .ugens import Bloom, Const, Envelope, Fill, SegmentLevel, hsv_to_rgb
 from .instrument import LightInstrument, LightSynth
-
-
-def hsv_to_rgb(h: float, s: float, v: float) -> np.ndarray:
-    return np.asarray(colorsys.hsv_to_rgb(h % 1.0, s, v), dtype=float)
 
 
 def _bloom_voice(pitch: int, vel: float, shared: dict):
