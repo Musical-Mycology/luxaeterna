@@ -99,3 +99,24 @@ def test_smooth_tracks_non_const_source():
     v1 = float(s.render(ctx(2, time=2 / 44)))
     v2 = float(s.render(ctx(3, time=3 / 44)))
     assert 0.0 < v1 < v2 < 1.0                        # glides toward the source
+
+
+def test_huecolor_maps_hue_to_rgb():
+    from luxaeterna.synth.ugens import HueColor, Const
+    red = HueColor(Const(0.0)).render(ctx(0))       # hue 0 -> red
+    assert red.shape == (3,)
+    assert red[0] > red[1] and red[0] > red[2]
+    green = HueColor(Const(0.33)).render(ctx(1))    # hue 0.33 -> green
+    assert green[1] > green[0] and green[1] > green[2]
+
+
+def test_huecolor_tracks_changing_hue():
+    # Recomputes each frame from its live input, so a Smooth-ed / cc-driven hue
+    # is reflected — not cached from construction.
+    from luxaeterna.synth.ugens import HueColor, Const
+    src = Const(0.0)
+    hc = HueColor(src)
+    assert hc.render(ctx(0))[0] > hc.render(ctx(0))[1]   # red (byte0 > byte1)
+    src.set_target(0.33)
+    g = hc.render(ctx(1))                                 # now green
+    assert g[1] > g[0] and g[1] > g[2]

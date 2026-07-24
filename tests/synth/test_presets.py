@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import colorsys
+
 import numpy as np
 import pytest
 
@@ -41,3 +43,41 @@ def test_glow_defaults_to_hue_zero_and_lights():
 def test_glow_rejects_unknown_param():
     with pytest.raises(KeyError):
         registry.build("glow", huue=0.5)
+
+
+def _out_hue(pixel):
+    return colorsys.rgb_to_hsv(float(pixel[0]), float(pixel[1]), float(pixel[2]))[0]
+
+
+def test_aurora_renders_full_field_lit():
+    out = registry.build("aurora", hue=0.33).render(_ctx(n=8, dt=0.3))
+    assert out.shape == (8, 3)
+    assert out.max(axis=1).min() > 0.0            # every pixel lit
+    np.testing.assert_allclose(out[0], out[7])    # uniform across the zone
+
+
+def test_aurora_breathes_and_never_dark():
+    a = registry.build("aurora", hue=0.0)
+    brights = [a.render(_ctx(frame=f, n=4, dt=0.5)).max() for f in range(14)]  # ~0.5–7 s
+    assert max(brights) - min(brights) > 0.1      # brightness oscillates (breathe)
+    assert min(brights) > 0.0                     # never fully dark
+
+
+def test_aurora_hue_glides_toward_target_not_snap():
+    a = registry.build("aurora", hue=0.0)
+    a.render(_ctx(frame=0, n=4, dt=0.1))          # settle at hue 0 (red)
+    a.set("hue", 0.33)                            # green target
+    h1 = _out_hue(a.render(_ctx(frame=1, n=4, dt=0.1))[0])
+    last = None
+    for f in range(2, 40):
+        last = a.render(_ctx(frame=f, n=4, dt=0.1))
+    hN = _out_hue(last[0])
+    assert 0.0 < h1 < 0.33                        # started gliding, did not snap
+    assert abs(hN - 0.33) < 0.02                  # converged near the target
+
+
+def test_aurora_param_names_and_rejects_unknown():
+    a = registry.build("aurora", hue=0.1)
+    assert a.param_names() == {"hue"}             # so a cc lane can target it
+    with pytest.raises(KeyError):
+        registry.build("aurora", huue=0.5)

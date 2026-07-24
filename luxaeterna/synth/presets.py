@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-import colorsys
-
-import numpy as np
-
 from . import registry
-from .ugens import Bloom, Const, Envelope, Fill, SegmentLevel
-from .instrument import LightInstrument, LightSynth
-
-
-def hsv_to_rgb(h: float, s: float, v: float) -> np.ndarray:
-    return np.asarray(colorsys.hsv_to_rgb(h % 1.0, s, v), dtype=float)
+from .ugens import Const, Envelope, Bloom, Fill, SegmentLevel, Smooth, HueColor, hsv_to_rgb
+from .instrument import LightInstrument, LightSynth, Param
 
 
 def _bloom_voice(pitch: int, vel: float, shared: dict):
@@ -53,3 +45,23 @@ def _make_glow(**params) -> LightInstrument:
 
 
 registry.register("glow", _make_glow)
+
+
+_AURORA_PARAMS = frozenset({"hue"})
+
+_AURORA_BREATHE = [(0.0, 0.55), (3.0, 1.0), (6.0, 0.55)]   # ~6 s cycle, never dark
+_AURORA_HUE_GLIDE_TAU = 0.4                                # seconds
+
+
+def _make_aurora(**params) -> LightInstrument:
+    unknown = set(params) - _AURORA_PARAMS
+    if unknown:                    # reject typo'd manifest params, don't discard them
+        raise KeyError(f"unknown aurora param(s) {sorted(unknown)} "
+                       f"(known: {sorted(_AURORA_PARAMS)})")
+    hue = Smooth(Const(float(params.get("hue", 0.0))), _AURORA_HUE_GLIDE_TAU)
+    level = SegmentLevel(_AURORA_BREATHE, loop_from=0.0)
+    out = Fill(level, HueColor(hue))
+    return LightInstrument(out, {"hue": Param("hue", hue)})
+
+
+registry.register("aurora", _make_aurora)
