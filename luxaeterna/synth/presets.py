@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
-
 from . import registry
 from .ugens import Const, Envelope, Bloom, Fill, SegmentLevel, Smooth, HueColor, hsv_to_rgb
 from .instrument import LightInstrument, LightSynth, Param
