@@ -128,3 +128,18 @@ def test_resolve_validates_cc_dest_for_light_instrument():
     with pytest.raises(ValueError) as ei:
         resolve(decl, shroom_capability("ie3"))
     assert "colour" in str(ei.value)
+
+
+def test_resolve_aurora_cc_hue_lane_drives_glide():
+    # aurora exposes a "hue" param, so a cc:74 -> hue lane resolves and its route
+    # drives the colour (the contract the whole smooth-glow design leans on).
+    decl = LightInstrumentDecl(
+        instrument="aurora", target="primary", params={},
+        lanes=[LightLane("cc:74", "hue")])
+    binding = resolve(decl, shroom_capability("ie3"))   # must NOT raise
+    assert "cc:74" in binding.routes
+    binding.routes["cc:74"](0.33)                       # drive hue toward green
+    out = None
+    for f in range(40):
+        out = binding.render(RenderContext(0.0, f, 0.1, np.linspace(0, 1, 12), 12, 3))
+    assert out[0, 1] > out[0, 0] and out[0, 1] > out[0, 2]   # glided to green-dominant
