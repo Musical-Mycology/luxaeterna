@@ -1,5 +1,7 @@
-"""feed_midi injects MIDI as if it arrived over o2lite — for device sims/tests
-with no live o2lite client. It reaches instruments only while RUNNING."""
+"""feed_midi is the direct-call input path — used in production by in-process
+consumers, and by device sims/tests with no live o2lite client. Its events are
+indistinguishable from wire packets: gated to RUNNING, drained on the render
+thread. It reaches instruments only while RUNNING."""
 
 from __future__ import annotations
 
