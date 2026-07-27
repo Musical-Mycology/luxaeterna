@@ -8,10 +8,10 @@ states which is which, because nothing else in the repo does.
 ## The routing rule this follows
 
 From mm-terrarium's `docs/control-gameserver-design.md` § *Message Routing*
-(Roger Dannenberg, 2026-07-24): the Control+GameServer is an **o2lite client of
-the Arco server**, not a full O2 peer. An o2lite client's `send()` has no local
-short-circuit — every message it sends leaves over its single link to the host.
-So:
+(v3, 2026-07-27): the Control+GameServer is an **o2lite client of the Arco
+server**, not a full O2 peer — Arco is the only full-O2 process in the room. An
+o2lite client's `send()` has no local short-circuit — every message it sends
+leaves over its single link to the host. So:
 
 | Path | Hops |
 |---|---|
