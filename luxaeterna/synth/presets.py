@@ -47,10 +47,11 @@ def _make_glow(**params) -> LightInstrument:
 registry.register("glow", _make_glow)
 
 
-_AURORA_PARAMS = frozenset({"hue"})
+_AURORA_PARAMS = frozenset({"hue", "level"})
 
 _AURORA_BREATHE = [(0.0, 0.55), (3.0, 1.0), (6.0, 0.55)]   # ~6 s cycle, never dark
 _AURORA_HUE_GLIDE_TAU = 0.4                                # seconds
+_AURORA_LEVEL_GLIDE_TAU = 0.15                             # seconds
 
 
 def _make_aurora(**params) -> LightInstrument:
@@ -59,9 +60,18 @@ def _make_aurora(**params) -> LightInstrument:
         raise KeyError(f"unknown aurora param(s) {sorted(unknown)} "
                        f"(known: {sorted(_AURORA_PARAMS)})")
     hue = Smooth(Const(float(params.get("hue", 0.0))), _AURORA_HUE_GLIDE_TAU)
-    level = SegmentLevel(_AURORA_BREATHE, loop_from=0.0)
-    out = Fill(level, HueColor(hue))
-    return LightInstrument(out, {"hue": Param("hue", hue)})
+    exposed = {"hue": Param("hue", hue)}
+    if "level" in params:
+        # Declaring level opts into external drive: the breath moves off this
+        # preset's private clock and onto whatever cc lane targets it, so a
+        # sound engine reading the same controller swells in step with the
+        # light. SegmentLevel has no set_target, which is why these are two
+        # graphs rather than one.
+        level = Smooth(Const(float(params["level"])), _AURORA_LEVEL_GLIDE_TAU)
+        exposed["level"] = Param("level", level)
+    else:
+        level = SegmentLevel(_AURORA_BREATHE, loop_from=0.0)
+    return LightInstrument(Fill(level, HueColor(hue)), exposed)
 
 
 registry.register("aurora", _make_aurora)

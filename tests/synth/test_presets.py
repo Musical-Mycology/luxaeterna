@@ -81,3 +81,31 @@ def test_aurora_param_names_and_rejects_unknown():
     assert a.param_names() == {"hue"}             # so a cc lane can target it
     with pytest.raises(KeyError):
         registry.build("aurora", huue=0.5)
+
+
+def test_aurora_without_level_param_still_self_breathes():
+    a = registry.build("aurora", hue=0.0)
+    assert a.param_names() == {"hue"}             # level is NOT exposed
+    brights = [a.render(_ctx(frame=f, n=4, dt=0.5)).max() for f in range(14)]
+    assert max(brights) - min(brights) > 0.1      # unchanged: still breathes
+    assert min(brights) > 0.0                     # unchanged: never dark
+
+
+def test_aurora_with_level_param_is_externally_driven_not_breathing():
+    a = registry.build("aurora", hue=0.0, level=1.0)
+    assert a.param_names() == {"hue", "level"}    # so a cc lane can target it
+    brights = [a.render(_ctx(frame=f, n=4, dt=0.5)).max() for f in range(14)]
+    assert max(brights) - min(brights) < 0.02     # held steady, breath is gone
+
+
+def test_aurora_level_glides_toward_target_not_snap():
+    a = registry.build("aurora", hue=0.0, level=1.0)
+    a.render(_ctx(frame=0, n=4, dt=0.1))          # settle at full
+    a.set("level", 0.2)
+    b1 = a.render(_ctx(frame=1, n=4, dt=0.1)).max()
+    last = None
+    for f in range(2, 60):
+        last = a.render(_ctx(frame=f, n=4, dt=0.1))
+    bN = last.max()
+    assert 0.2 < b1 < 1.0                         # started gliding, did not snap
+    assert abs(bN - 0.2) < 0.02                   # converged near the target

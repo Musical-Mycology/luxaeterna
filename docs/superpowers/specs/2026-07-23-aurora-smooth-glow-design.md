@@ -216,3 +216,15 @@ end-to-end coverage of the cc-lane glide path. Accepted knowingly.
 - **Zero** director / welcome-path / manifest / resolve changes.
 - Two repos, sequenced: **luxaeterna first**, mm-terrarium second.
 - The terrarium smoke test's loss of note-on coverage is an accepted, deliberate trade.
+
+## Amendment 2026-08-06: additive `level` param
+
+`aurora` gained an optional `level` build param. Declaring it replaces the
+internal `_AURORA_BREATHE` envelope with a `Smooth(Const(...))` exposed as a
+cc-drivable `Param`; omitting it leaves the self-breathing graph byte for byte
+unchanged, so nothing above this line moved.
+
+Motivation is cross-repo: mm-terrarium's Tuneshroom audio demo needs the visible
+breath and the audible swell to be the same number rather than two clocks that
+happen to agree. See mm-terrarium
+`docs/superpowers/specs/2026-08-06-tuneshroom-audio-design.md` section 3.
