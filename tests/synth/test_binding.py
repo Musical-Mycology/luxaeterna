@@ -160,9 +160,14 @@ def test_resolve_aurora_cc_level_lane_drives_brightness():
     assert out.max() < 0.3                                  # followed the lane down
 
 
-def test_resolve_aurora_level_lane_without_level_param_raises():
-    # A manifest that wants the breath driven must declare the param. Without it
-    # aurora self-breathes and has nothing to set, so this is a located failure.
+def test_aurora_level_lane_without_the_param_hits_the_unknown_dest_guard():
+    # This does not exercise the level-param opt-out logic itself: without a
+    # declared "level" param, "level" is not a known dest, so this is caught by
+    # resolve()'s pre-existing generic "lane.dest not in known" guard, the same
+    # guard covered by test_resolve_rejects_unknown_cc_lane_dest and
+    # test_resolve_validates_cc_dest_for_light_instrument. It is kept anyway for
+    # its documentary value to a Bit author: forgetting to declare "level" when
+    # you want the breath driven externally is a located error, not silence.
     decl = LightInstrumentDecl(
         instrument="aurora", target="primary", params={"hue": 0.33},
         lanes=[LightLane("cc:11", "level")])
