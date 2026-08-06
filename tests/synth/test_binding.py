@@ -143,3 +143,29 @@ def test_resolve_aurora_cc_hue_lane_drives_glide():
     for f in range(40):
         out = binding.render(RenderContext(0.0, f, 0.1, np.linspace(0, 1, 12), 12, 3))
     assert out[0, 1] > out[0, 0] and out[0, 1] > out[0, 2]   # glided to green-dominant
+
+
+def test_resolve_aurora_cc_level_lane_drives_brightness():
+    decl = LightInstrumentDecl(
+        instrument="aurora", target="primary", params={"hue": 0.33, "level": 1.0},
+        lanes=[LightLane("cc:11", "level")])
+    binding = resolve(decl, shroom_capability("ie3"))       # must NOT raise
+    assert "cc:11" in binding.routes
+    for f in range(20):                                     # settle at full
+        binding.render(RenderContext(0.0, f, 0.1, np.linspace(0, 1, 12), 12, 3))
+    binding.routes["cc:11"](0.2)                            # drive the breath down
+    out = None
+    for f in range(20, 80):
+        out = binding.render(RenderContext(0.0, f, 0.1, np.linspace(0, 1, 12), 12, 3))
+    assert out.max() < 0.3                                  # followed the lane down
+
+
+def test_resolve_aurora_level_lane_without_level_param_raises():
+    # A manifest that wants the breath driven must declare the param. Without it
+    # aurora self-breathes and has nothing to set, so this is a located failure.
+    decl = LightInstrumentDecl(
+        instrument="aurora", target="primary", params={"hue": 0.33},
+        lanes=[LightLane("cc:11", "level")])
+    with pytest.raises(ValueError) as ei:
+        resolve(decl, shroom_capability("ie3"))
+    assert "level" in str(ei.value)
