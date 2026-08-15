@@ -5,6 +5,7 @@ mode and this import work without the optional 'websim' extra installed."""
 
 from __future__ import annotations
 
+import html
 import json
 import threading
 
@@ -61,6 +62,14 @@ function draw(f){
 </script></body></html>"""
 
 
+def _labeled_page_html(label: str) -> str:
+    """Return PAGE_HTML with an identifying label appended to its <title>."""
+    labeled_title = (f"<title>Lux Aeterna — Shroom LED Simulator — "
+                      f"{html.escape(label)}</title>")
+    return PAGE_HTML.replace(
+        "<title>Lux Aeterna — Shroom LED Simulator</title>", labeled_title, 1)
+
+
 def capability_message(cap: SurfaceCapability) -> dict:
     """The connect-time handshake: enough geometry for a browser to lay out and
     color the pixels from raw DMX frames."""
@@ -75,14 +84,37 @@ def capability_message(cap: SurfaceCapability) -> dict:
 
 
 class WebSimBackend(DMXBackend):
+    """Record DMX frames and, when serving, stream them to a self-contained
+    browser canvas — an on-screen LED simulator for the canonical Shroom.
+
+    Parameters
+    ----------
+    capability : SurfaceCapability or None
+        Pixel geometry/zones sent in the connect-time handshake. Defaults to
+        ``shroom_capability()``.
+    host : str
+        Address to bind the websocket/HTTP server to.
+    port : int
+        Port to bind to (0 = OS-assigned, read back via ``.port``).
+    serve : bool
+        If False, frames are recorded only — no server, no port, headless.
+    label : str or None
+        Optional identifying text appended to the served page's ``<title>``,
+        e.g. ``"sim-room"`` or a device id — lets an operator tell two open
+        browser tabs apart. ``None`` (default) leaves the title unchanged.
+        Stored verbatim on ``self.label`` for introspection.
+    """
+
     def __init__(self, capability: SurfaceCapability | None = None,
                  host: str = "127.0.0.1", port: int = 0,
-                 serve: bool = True) -> None:
+                 serve: bool = True, label: str | None = None) -> None:
         self._cap = capability or shroom_capability()
         self._n = self._cap.pixel_count * 3          # bytes we care about
         self._host = host
         self._port = port
         self._serve = serve
+        self.label = label
+        self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
         self.frames: list[bytes] = []
         self._open = False
         self._server = None
@@ -141,7 +173,7 @@ class WebSimBackend(DMXBackend):
             return None                              # proceed to WS handshake
         from websockets.datastructures import Headers
         from websockets.http11 import Response
-        body = PAGE_HTML.encode("utf-8")
+        body = self._page_html.encode("utf-8")
         headers = Headers()
         headers["Content-Type"] = "text/html; charset=utf-8"
         headers["Content-Length"] = str(len(body))

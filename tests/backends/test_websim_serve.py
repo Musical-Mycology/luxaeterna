@@ -34,3 +34,15 @@ def test_client_receives_capability_then_frame():
             assert bytes(frame) == bytes(range(36))
     finally:
         b.close()
+
+
+def test_label_appends_to_title():
+    b = WebSimBackend(capability=shroom_capability(), label="sim-room")
+    assert ("<title>Lux Aeterna — Shroom LED Simulator — sim-room</title>"
+            in b._page_html)
+
+
+def test_label_is_html_escaped():
+    b = WebSimBackend(capability=shroom_capability(), label="<script>alert(1)</script>")
+    assert "<script>alert(1)</script>" not in b._page_html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in b._page_html
