@@ -105,17 +105,24 @@ class WebSimBackend(DMXBackend):
         Optional identifying text appended to the served page's ``<title>``,
         e.g. ``"sim-room"`` or a device id — lets an operator tell two open
         browser tabs apart. ``None`` (default) leaves the title unchanged.
+        Stored verbatim on ``self.label`` for introspection.
     """
 ```
 
-### 5.3 Building `self._page_html` once, in `__init__`
+### 5.3 Storing `label` and building `self._page_html` once, in `__init__`
 
 ```python
+self.label = label
 self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
 ```
 
-with a small module-level helper (kept out of `__init__` so it's independently
-testable and keeps `__init__` free of string-munging):
+`self.label` is stored as a plain public attribute — matching `SACN.source_name`
+(`sacn.py:46`, also a stored public attribute, not just consumed internally) — so a
+caller or test can confirm what label a backend was constructed with without
+inspecting `_page_html`/HTML at all.
+
+A small module-level helper builds the actual HTML (kept out of `__init__` so it's
+independently testable and keeps `__init__` free of string-munging):
 
 ```python
 def _labeled_page_html(label: str) -> str:
@@ -146,9 +153,9 @@ def _labeled_page_html(label: str) -> str:
 No new error paths — `label` is either `None` or a string; there's nothing to
 validate or reject. Testing:
 
-- `tests/backends/test_websim.py` — new case: `WebSimBackend(label=None)` (or the
-  omitted-arg default) leaves `backend._page_html == PAGE_HTML` (or equivalently,
-  the served page is byte-identical to today's).
+- `tests/backends/test_websim.py` — new cases: `WebSimBackend(label="sim-room").label
+  == "sim-room"`; the omitted-arg default leaves `backend.label is None` and
+  `backend._page_html == PAGE_HTML` (byte-identical to today's page).
 - `tests/backends/test_websim_serve.py` — extend `test_page_is_self_contained_canvas`
   style coverage with a new `test_label_appends_to_title`: construct with
   `label="sim-room"`, assert the served page's `<title>` contains both
@@ -175,7 +182,8 @@ validate or reject. Testing:
 
 ## 8. Decisions locked (from brainstorm)
 
-- New parameter name: **`label: str | None = None`**, appended after `serve`.
+- New parameter name: **`label: str | None = None`**, appended after `serve`, stored
+  verbatim on **`self.label`** (public attribute, matching `SACN.source_name`).
 - Rendering: **append**, not replace — `Lux Aeterna — Shroom LED Simulator — {label}`.
 - Escaped via `html.escape`; computed once in `__init__`, not per-request.
 - `PAGE_HTML` module constant stays as-is; a new `_labeled_page_html()` helper does
