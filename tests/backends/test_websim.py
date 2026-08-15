@@ -3,7 +3,7 @@ surface to browser clients via a capability handshake."""
 
 from __future__ import annotations
 
-from luxaeterna.backends.websim import WebSimBackend, capability_message
+from luxaeterna.backends.websim import WebSimBackend, capability_message, PAGE_HTML
 from luxaeterna.synth.capability import shroom_capability
 
 
@@ -35,3 +35,14 @@ def test_send_does_not_mutate_frame():
     frame = bytearray([7]) * 512
     b.send(frame)
     assert frame == bytearray([7]) * 512
+
+
+def test_label_defaults_to_none_and_page_html_is_unchanged():
+    b = WebSimBackend(capability=shroom_capability(), serve=False)
+    assert b.label is None
+    assert b._page_html == PAGE_HTML
+
+
+def test_label_is_stored_verbatim():
+    b = WebSimBackend(capability=shroom_capability(), serve=False, label="sim-room")
+    assert b.label == "sim-room"
