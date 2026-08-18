@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from . import registry
-from .ugens import Const, Envelope, Bloom, Fill, SegmentLevel, Smooth, HueColor, hsv_to_rgb
+from .ugens import (Const, Envelope, Bloom, Fill, Rainbow, SegmentLevel, Smooth,
+                    HueColor, hsv_to_rgb)
 from .instrument import LightInstrument, LightSynth, Param
 
 
@@ -75,3 +76,28 @@ def _make_aurora(**params) -> LightInstrument:
 
 
 registry.register("aurora", _make_aurora)
+
+
+_RAINBOW_PARAMS = frozenset({"hue", "level", "span", "speed"})
+_RAINBOW_DEFAULT_SPAN = 1.0     # one full hue cycle across the whole bound zone
+_RAINBOW_DEFAULT_SPEED = 0.05   # hue cycles per second
+
+
+def _make_rainbow(**params) -> LightInstrument:
+    unknown = set(params) - _RAINBOW_PARAMS
+    if unknown:                    # reject typo'd manifest params, don't discard them
+        raise KeyError(f"unknown rainbow param(s) {sorted(unknown)} "
+                       f"(known: {sorted(_RAINBOW_PARAMS)})")
+    hue = Smooth(Const(float(params.get("hue", 0.0))), _AURORA_HUE_GLIDE_TAU)
+    exposed = {"hue": Param("hue", hue)}
+    if "level" in params:
+        level = Smooth(Const(float(params["level"])), _AURORA_LEVEL_GLIDE_TAU)
+        exposed["level"] = Param("level", level)
+    else:
+        level = SegmentLevel(_AURORA_BREATHE, loop_from=0.0)
+    span = float(params.get("span", _RAINBOW_DEFAULT_SPAN))
+    speed = float(params.get("speed", _RAINBOW_DEFAULT_SPEED))
+    return LightInstrument(Rainbow(level, hue, span, speed), exposed)
+
+
+registry.register("rainbow", _make_rainbow)

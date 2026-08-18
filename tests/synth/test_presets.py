@@ -109,3 +109,76 @@ def test_aurora_level_glides_toward_target_not_snap():
     bN = last.max()
     assert 0.2 < b1 < 1.0                         # started gliding, did not snap
     assert abs(bN - 0.2) < 0.02                   # converged near the target
+
+
+def test_rainbow_builds_as_instrument():
+    assert isinstance(registry.build("rainbow", hue=0.0), LightInstrument)
+
+
+def test_rainbow_varies_hue_across_positions_not_uniform():
+    """The whole point: unlike aurora/glow/bloom, adjacent pixels differ."""
+    out = registry.build("rainbow", hue=0.0, span=1.0, speed=0.0).render(
+        _ctx(n=8, dt=0.1))
+    assert out.shape == (8, 3)
+    # Compare the first pixel to a middle one, not the literal last pixel:
+    # span=1.0 is documented as "one full hue cycle across the whole bound
+    # zone", and _ctx's positions are an endpoint-inclusive linspace(0, 1,
+    # n), so position 0 and position 1.0 always close the loop back to the
+    # same hue -- out[0] and out[-1] tie by construction for ANY n under a
+    # full-cycle span, not just here. A middle pixel isn't subject to that
+    # wraparound and still proves the point: hue genuinely varies by position.
+    first_hue = _out_hue(out[0])
+    mid_hue = _out_hue(out[4])
+    assert abs(first_hue - mid_hue) > 0.1   # meaningfully different across the field
+
+
+def test_rainbow_span_zero_is_uniform_like_aurora():
+    """span=0 collapses the gradient to a single hue -- a sanity bound on the
+    formula, not a real operating mode."""
+    out = registry.build("rainbow", hue=0.2, span=0.0, speed=0.0).render(
+        _ctx(n=6, dt=0.1))
+    np.testing.assert_allclose(out[0], out[5], atol=1e-6)
+
+
+def test_rainbow_scrolls_over_time():
+    """speed != 0 advances the phase, so the SAME pixel's hue at frame N
+    differs from frame 0 -- the "scrolling" in scrolling gradient."""
+    inst = registry.build("rainbow", hue=0.0, span=1.0, speed=0.5)
+    out0 = inst.render(_ctx(frame=0, n=8, dt=0.1))
+    out1 = inst.render(_ctx(frame=1, n=8, dt=0.1))
+    assert abs(_out_hue(out0[0]) - _out_hue(out1[0])) > 0.01
+
+
+def test_rainbow_param_names_and_rejects_unknown():
+    r = registry.build("rainbow", hue=0.1)
+    assert r.param_names() == {"hue"}
+    with pytest.raises(KeyError):
+        registry.build("rainbow", huue=0.5)
+
+
+def test_rainbow_with_level_param_is_externally_driven():
+    r = registry.build("rainbow", hue=0.0, level=1.0)
+    assert r.param_names() == {"hue", "level"}
+    brights = [r.render(_ctx(frame=f, n=4, dt=0.5)).max() for f in range(14)]
+    assert max(brights) - min(brights) < 0.02   # held steady, no private breathing
+
+
+def test_rainbow_without_level_still_breathes_like_aurora():
+    r = registry.build("rainbow", hue=0.0)
+    assert r.param_names() == {"hue"}
+    brights = [r.render(_ctx(frame=f, n=4, dt=0.5)).max() for f in range(14)]
+    assert max(brights) - min(brights) > 0.1
+    assert min(brights) > 0.0
+
+
+def test_rainbow_hue_glides_toward_target_not_snap():
+    r = registry.build("rainbow", hue=0.0, span=0.0, speed=0.0)
+    r.render(_ctx(frame=0, n=4, dt=0.1))
+    r.set("hue", 0.33)
+    h1 = _out_hue(r.render(_ctx(frame=1, n=4, dt=0.1))[0])
+    last = None
+    for f in range(2, 40):
+        last = r.render(_ctx(frame=f, n=4, dt=0.1))
+    hN = _out_hue(last[0])
+    assert 0.0 < h1 < 0.33
+    assert abs(hN - 0.33) < 0.02

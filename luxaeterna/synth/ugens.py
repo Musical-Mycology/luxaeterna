@@ -294,6 +294,35 @@ class Bloom(LightUgen):
         return intensity[:, None] * color[None, :]
 
 
+class Rainbow(LightUgen):
+    """Field-rate scrolling hue gradient: hue varies by position across the
+    bound zone and advances over time. `positions` spans 0..1 across
+    whatever zone this instrument targets -- for target="primary" on a
+    multi-fixture Room, that is the WHOLE concatenated surface, which is
+    what lets one declaration paint a gradient that crosses fixture
+    boundaries with no seam."""
+
+    rate = "field"
+
+    def __init__(self, level, base_hue, span: float, speed: float) -> None:
+        super().__init__()
+        self._level = as_ugen(level)
+        self._base_hue = as_ugen(base_hue)
+        self._span = float(span)
+        self._speed = float(speed)
+
+    def _compute(self, ctx: RenderContext) -> np.ndarray:
+        level = float(np.asarray(self._level.render(ctx)))
+        base_hue = float(np.asarray(self._base_hue.render(ctx)))
+        hue = (base_hue + self._span * ctx.positions + self._speed * ctx.time) % 1.0
+        out = np.empty((ctx.n, ctx.channels))
+        for i in range(ctx.n):
+            out[i, :3] = hsv_to_rgb(float(hue[i]), 1.0, 1.0)
+        if ctx.channels > 3:
+            out[:, 3:] = 0.0
+        return np.clip(level * out, 0.0, 1.0)
+
+
 class Noise(LightUgen):
     rate = "field"
 
