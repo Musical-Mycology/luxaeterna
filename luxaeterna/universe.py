@@ -10,18 +10,25 @@ from .exceptions import ChannelError
 
 
 class Universe:
-    """A single DMX512 universe (512 channels).
+    """A single DMX512 universe (512 channels) — or, when constructed with a
+    non-default channel_count, a caller-managed internal render buffer of
+    that width (e.g. a simulator rendering a wider-than-512-channel logical
+    surface before slicing it up itself). Real DMX-512 wire universes -- the
+    Art-Net/sACN/serial-Enttec backends -- still assume exactly 512 channels
+    and are unaffected by a non-default channel_count, since this class never
+    hands itself to them; only the caller that constructed it does that.
 
     All channel values are stored in a flat bytearray for minimal
     allocation overhead. A lightweight lock protects concurrent writes
     from the application thread and reads from the output thread.
     """
 
-    __slots__ = ("universe_id", "_data", "_lock", "_dirty")
+    __slots__ = ("universe_id", "_channel_count", "_data", "_lock", "_dirty")
 
-    def __init__(self, universe_id: int = 0) -> None:
+    def __init__(self, universe_id: int = 0, channel_count: int = DMX_CHANNELS) -> None:
         self.universe_id = universe_id
-        self._data = bytearray(DMX_CHANNELS)
+        self._channel_count = channel_count
+        self._data = bytearray(channel_count)
         self._lock = threading.Lock()
         self._dirty = True  # Flag for output loop optimisation
 
@@ -29,16 +36,16 @@ class Universe:
 
     def set(self, channel: int, value: int) -> None:
         """Set a single channel (0-511) to *value* (0-255)."""
-        if not (0 <= channel < DMX_CHANNELS):
-            raise ChannelError(f"Channel {channel} out of range 0-{DMX_CHANNELS - 1}")
+        if not (0 <= channel < self._channel_count):
+            raise ChannelError(f"Channel {channel} out of range 0-{self._channel_count - 1}")
         with self._lock:
             self._data[channel] = value & 0xFF
             self._dirty = True
 
     def get(self, channel: int) -> int:
         """Read a single channel value."""
-        if not (0 <= channel < DMX_CHANNELS):
-            raise ChannelError(f"Channel {channel} out of range 0-{DMX_CHANNELS - 1}")
+        if not (0 <= channel < self._channel_count):
+            raise ChannelError(f"Channel {channel} out of range 0-{self._channel_count - 1}")
         return self._data[channel]
 
     # --- bulk ops (fast path for pixel strips / multi-channel fixtures) ---
@@ -50,7 +57,7 @@ class Universe:
         looping ``set()`` for multi-channel writes.
         """
         end = start + len(values)
-        if start < 0 or end > DMX_CHANNELS:
+        if start < 0 or end > self._channel_count:
             raise ChannelError(f"Range {start}:{end} exceeds universe bounds")
         with self._lock:
             self._data[start:end] = values
@@ -59,9 +66,9 @@ class Universe:
     def fill(self, value: int, start: int = 0, count: int | None = None) -> None:
         """Fill *count* channels starting at *start* with a single *value*."""
         if count is None:
-            count = DMX_CHANNELS - start
+            count = self._channel_count - start
         end = start + count
-        if start < 0 or end > DMX_CHANNELS:
+        if start < 0 or end > self._channel_count:
             raise ChannelError(f"Fill range {start}:{end} exceeds universe bounds")
         val = value & 0xFF
         with self._lock:
@@ -89,13 +96,13 @@ class Universe:
     def reset(self) -> None:
         """Zero all channels."""
         with self._lock:
-            self._data = bytearray(DMX_CHANNELS)
+            self._data = bytearray(self._channel_count)
             self._dirty = True
 
     # --- dunder helpers ---
 
     def __len__(self) -> int:
-        return DMX_CHANNELS
+        return self._channel_count
 
     def __getitem__(self, channel: int) -> int:
         return self.get(channel)
