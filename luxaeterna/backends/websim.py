@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import threading
 
 from .base import DMXBackend
 from ..synth.capability import SurfaceCapability, shroom_capability
+
+logger = logging.getLogger(__name__)
 
 
 PAGE_HTML = """<!doctype html><html><head><meta charset="utf-8">
@@ -79,6 +82,45 @@ function draw(f){
     cx.fillStyle=c;cx.beginPath();cx.arc(x,y,dot,0,2*Math.PI);cx.fill();
   }
 }
+/* --- operator input: gestures sent back over the same socket --------- */
+const TAP_DELAY_MS=250,TILT_MIN_MS=50,DRAG_PX=5;
+let tapTimer=null,dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0;
+function sendGesture(g){
+  if(ws.readyState!==1)return;
+  ws.send(JSON.stringify(g));
+  st.textContent='sent '+g.type+(g.type==='tap'?' x'+g.count:' '+g.gamma.toFixed(0)+'°');
+}
+function dragGamma(x){
+  const w=cv.clientWidth||cv.width;
+  const g=(x/Math.max(1,w))*180-90;
+  return Math.max(-90,Math.min(90,g));
+}
+cv.onclick=(e)=>{
+  if(dragMoved){dragMoved=false;return;}
+  if(tapTimer!==null)return;                      // second click of a pair
+  tapTimer=setTimeout(()=>{tapTimer=null;sendGesture({type:'tap',count:1});},TAP_DELAY_MS);
+};
+cv.ondblclick=(e)=>{
+  if(tapTimer!==null){clearTimeout(tapTimer);tapTimer=null;}
+  sendGesture({type:'tap',count:2});
+};
+cv.onpointerdown=(e)=>{dragging=true;dragMoved=false;dragX0=e.offsetX;lastTiltMs=0;};
+cv.onpointermove=(e)=>{
+  if(!dragging)return;
+  if(Math.abs(e.offsetX-dragX0)>DRAG_PX)dragMoved=true;
+  if(!dragMoved)return;
+  const now=Date.now();
+  if(now-lastTiltMs<TILT_MIN_MS)return;
+  lastTiltMs=now;
+  sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+};
+function endDrag(e){
+  if(!dragging)return;
+  dragging=false;
+  if(dragMoved)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+}
+cv.onpointerup=endDrag;
+cv.onpointerleave=endDrag;
 </script></body></html>"""
 
 
@@ -123,17 +165,26 @@ class WebSimBackend(DMXBackend):
         e.g. ``"sim-room"`` or a device id — lets an operator tell two open
         browser tabs apart. ``None`` (default) leaves the title unchanged.
         Stored verbatim on ``self.label`` for introspection.
+    on_input : callable or None
+        Called with the decoded dict for every inbound JSON **text**
+        message a connected page sends (the input side of the two-way
+        seam). Runs on the websocket handler thread; hand off to your
+        own loop if you need one. Binary frames, malformed JSON and
+        non-dict payloads are dropped. ``None`` (default) drains and
+        discards inbound, exactly as before this seam existed.
     """
 
     def __init__(self, capability: SurfaceCapability | None = None,
                  host: str = "127.0.0.1", port: int = 0,
-                 serve: bool = True, label: str | None = None) -> None:
+                 serve: bool = True, label: str | None = None,
+                 on_input=None) -> None:
         self._cap = capability or shroom_capability()
         self._n = self._cap.pixel_count * 3          # bytes we care about
         self._host = host
         self._port = port
         self._serve = serve
         self.label = label
+        self.on_input = on_input
         self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
         self.frames: list[bytes] = []
         self._last_frame: bytes | None = None
@@ -214,8 +265,20 @@ class WebSimBackend(DMXBackend):
             last = self._last_frame
             if last is not None:
                 connection.send(last)
-            for _ in connection:                     # hold open until close
-                pass
+            for raw in connection:               # hold open until close
+                if not isinstance(raw, str):
+                    continue                     # frames only flow down
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    logger.debug("dropping malformed inbound JSON")
+                    continue
+                if not isinstance(msg, dict) or self.on_input is None:
+                    continue
+                try:
+                    self.on_input(msg)
+                except Exception:
+                    logger.debug("on_input callback raised", exc_info=True)
         except Exception:
             pass
         finally:
