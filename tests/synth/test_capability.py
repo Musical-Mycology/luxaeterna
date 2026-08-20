@@ -77,3 +77,70 @@ def test_a_primary_that_is_not_the_whole_surface_is_rejected():
     anything but the whole surface is a lie about this module's vocabulary."""
     with pytest.raises(ValueError, match="must span the whole surface"):
         SurfaceCapability("x", 12, "GRB", [Zone("primary", 0, 8)])
+
+
+def test_a_ring_that_does_not_cover_the_surface_is_rejected():
+    """The traced case. A ring covering 8 of 20 px sends its tail pixels to
+    websim's pos() fallback, which places them at x=328 to 496 on a 320 px
+    canvas: the same truncation claude/websim-linear-surface-layout existed to
+    fix, on the one path that branch could not touch. Caught by rule 3, since
+    a ring alone does not tile 20 px."""
+    with pytest.raises(ValueError, match="gap at pixel 8"):
+        SurfaceCapability("x", 20, "GRB",
+                          [Zone("ring", 0, 8), Zone("primary", 0, 20)])
+
+
+def test_ring_and_stem_must_account_for_every_pixel_even_when_zones_tile():
+    """The case rule 3 alone misses, and the reason rule 4 exists. These zones
+    tile [0, 20) perfectly and pass every coverage check, and pixels 12 to 19
+    still take websim's ring/stem fallback and still land off-canvas."""
+    with pytest.raises(ValueError, match="ring/stem geometry leaves pixel 12"):
+        SurfaceCapability("x", 20, "GRB",
+                          [Zone("ring", 0, 8), Zone("stem", 8, 4),
+                           Zone("tip", 12, 8), Zone("primary", 0, 20)])
+
+
+def test_a_gap_between_zones_is_rejected():
+    with pytest.raises(ValueError, match="gap at pixel 4"):
+        SurfaceCapability("x", 12, "GRB", [Zone("a", 0, 4), Zone("b", 8, 4)])
+
+
+def test_overlapping_zones_are_rejected():
+    with pytest.raises(ValueError, match="zones overlap: 'a' and 'b'"):
+        SurfaceCapability("x", 12, "GRB", [Zone("a", 0, 8), Zone("b", 4, 8)])
+
+
+def test_a_capability_with_no_zones_is_legal():
+    """Naming no zones at all is a complete declaration. Naming some but not
+    all is the ambiguous middle rule 3 refuses."""
+    cap = SurfaceCapability("x", 12, "GRB", [])
+    assert cap.zone("primary") == Zone("primary", 0, 12)
+
+
+def test_primary_alone_is_legal():
+    """The shape harness/room_surface.py's to_capability() produces for a
+    profile declaring no zones, and the one tests/synth/test_end_to_end.py has
+    always used for its 1000 px array."""
+    cap = SurfaceCapability("array", 1000, "GRB", [Zone("primary", 0, 1000)])
+    assert cap.zone("primary").count == 1000
+
+
+def test_primary_may_overlap_real_zones():
+    """primary spans the whole surface by design, so it is exempt from the gap
+    and overlap checks. Twelve of the thirteen capabilities either repo
+    constructs have this shape, shroom_capability() included, and a blanket
+    no-overlap rule would fail on the canonical surface itself."""
+    cap = SurfaceCapability("x", 12, "GRB",
+                            [Zone("ring", 0, 8), Zone("stem", 8, 4),
+                             Zone("primary", 0, 12)])
+    assert cap.zone("ring") == Zone("ring", 0, 8)
+
+
+def test_zones_may_tile_out_of_declaration_order():
+    """mm-terrarium's `odd` profile shape, RoomZone("b", 10, 20) declared
+    before RoomZone("a", 0, 10). The coverage check sorts by start first, and
+    declaration order is preserved on the way out."""
+    cap = SurfaceCapability("odd", 30, "GRB",
+                            [Zone("b", 10, 20), Zone("a", 0, 10),
+                             Zone("primary", 0, 30)])
+    assert [z.name for z in cap.zones] == ["b", "a", "primary"]

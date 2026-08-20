@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 _WHOLE_SURFACE = "primary"
+_SHROOM_ZONES = ("ring", "stem")
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,12 @@ class SurfaceCapability:
     zones: list[Zone]
 
     def __post_init__(self) -> None:
+        # Order is load-bearing. _check_coverage assumes every zone is
+        # already inside the surface, and _check_shroom_geometry assumes the
+        # non-`primary` zones already tile it.
         _check_bounds(self)
+        _check_coverage(self)
+        _check_shroom_geometry(self)
 
     def zone(self, name: str) -> Zone:
         for z in self.zones:
@@ -64,6 +70,78 @@ def _check_bounds(cap: SurfaceCapability) -> None:
         raise ValueError(f"surface {cap.surface_id!r}: zone {_WHOLE_SURFACE!r} "
                          f"must span the whole surface (0, {cap.pixel_count}), "
                          f"got ({primary.start}, {primary.count})")
+
+
+def _first_tiling_fault(zones: list[Zone],
+                        pixel_count: int) -> tuple[str, object] | None:
+    """The first place `zones` fails to tile [0, pixel_count) exactly, as
+    ("overlap", (name, name)) or ("gap", pixel), else None.
+
+    Sorted by start before walking, so the answer is in position order and a
+    caller's message does not depend on the order zones were declared in.
+    Assumes _check_bounds has run, so no zone reaches past pixel_count and the
+    cursor can only fall short of it, never overshoot."""
+    cursor = 0
+    previous = None
+    for z in sorted(zones, key=lambda zone: (zone.start, zone.count)):
+        if z.start < cursor:
+            return "overlap", (previous.name, z.name)
+        if z.start > cursor:
+            return "gap", cursor
+        cursor, previous = z.start + z.count, z
+    if cursor != pixel_count:
+        return "gap", cursor
+    return None
+
+
+def _check_coverage(cap: SurfaceCapability) -> None:
+    """Rule 3: the non-`primary` zones either name nothing or name everything.
+
+    `primary` is excluded from both the gap and the overlap check because it
+    is an alias for the whole surface rather than a region of it, and it
+    overlaps every real zone by design: shroom_capability() declares it that
+    way, and both of mm-terrarium's adapters append it that way."""
+    others = [z for z in cap.zones if z.name != _WHOLE_SURFACE]
+    if not others:
+        return
+    fault = _first_tiling_fault(others, cap.pixel_count)
+    if fault is None:
+        return
+    kind, detail = fault
+    if kind == "overlap":
+        raise ValueError(f"surface {cap.surface_id!r}: zones overlap: "
+                         f"{detail[0]!r} and {detail[1]!r}")
+    raise ValueError(f"surface {cap.surface_id!r}: zones do not tile its "
+                     f"{cap.pixel_count} px: gap at pixel {detail}")
+
+
+def _check_shroom_geometry(cap: SurfaceCapability) -> None:
+    """Rule 4: a surface claiming Shroom geometry must be fully described by
+    it.
+
+    `ring` and `stem` are this module's canonical Shroom vocabulary, defined
+    by shroom_capability() below, and the only zone names in the codebase with
+    a non-linear physical meaning. A consumer laying out a ring and a stem has
+    no defined position for a pixel in neither, which is exactly why
+    backends/websim.py's pos() falls back to a fixed 24 px pitch and draws
+    such a pixel off-canvas.
+
+    Rule 3 does not give this. A ring, a stem and a third zone can tile the
+    surface perfectly and still leave pixels the ring/stem layout cannot
+    place."""
+    shroom = [z for z in cap.zones if z.name in _SHROOM_ZONES]
+    if not shroom or sum(z.count for z in shroom) == cap.pixel_count:
+        return
+    # _check_coverage has already established that the non-`primary` zones
+    # tile the surface, so the shortfall is exactly the zones that are neither
+    # Shroom nor `primary`, and the earliest of those is the first pixel this
+    # geometry does not reach.
+    unaccounted = min(z.start for z in cap.zones
+                      if z.name not in _SHROOM_ZONES
+                      and z.name != _WHOLE_SURFACE)
+    raise ValueError(f"surface {cap.surface_id!r}: ring/stem geometry leaves "
+                     f"pixel {unaccounted} unaccounted; a surface declaring a "
+                     f"ring or a stem must describe every pixel with them")
 
 
 class CapabilityRegistry:
