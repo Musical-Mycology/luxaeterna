@@ -116,6 +116,7 @@ class WebSimBackend(DMXBackend):
         self.label = label
         self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
         self.frames: list[bytes] = []
+        self._last_frame: bytes | None = None
         self._open = False
         self._server = None
         self._thread = None
@@ -148,6 +149,7 @@ class WebSimBackend(DMXBackend):
     def send(self, frame, universe_id: int = 0) -> None:
         payload = bytes(frame[:self._n])             # copy; never mutate frame
         self.frames.append(payload)
+        self._last_frame = payload
         if not self._serve:
             return
         with self._lock:
@@ -184,6 +186,9 @@ class WebSimBackend(DMXBackend):
             self._clients.add(connection)
         try:
             connection.send(json.dumps(capability_message(self._cap)))
+            last = self._last_frame          # read once; send() may replace it
+            if last is not None:
+                connection.send(last)
             for _ in connection:                     # hold open until close
                 pass
         except Exception:
