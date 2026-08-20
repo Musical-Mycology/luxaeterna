@@ -186,7 +186,12 @@ class WebSimBackend(DMXBackend):
             self._clients.add(connection)
         try:
             connection.send(json.dumps(capability_message(self._cap)))
-            last = self._last_frame          # read once; send() may replace it
+            # Reading once guards nothing (_last_frame is set once, in
+            # __init__, and never reset to None). Real, accepted gap: this
+            # connection is already in self._clients, so a concurrent send()
+            # can land a fresher frame ahead of this replay, leaving the
+            # client stale until the next send. See design doc section 6.
+            last = self._last_frame
             if last is not None:
                 connection.send(last)
             for _ in connection:                     # hold open until close

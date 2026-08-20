@@ -210,6 +210,16 @@ ordering by construction.
 - A replay write to a client that dies between the capability write and the
   replay is caught by `_handle()`'s existing `except Exception`, which
   already discards the connection in its `finally`.
+- A client whose connect races a concurrent `send()` can have that `send()`'s
+  broadcast reach it before its own connect-time replay does, because the
+  connection is already registered in `self._clients` before the capability
+  and replay are written. The client is then briefly on an older frame than
+  the one already broadcast to it, and this does not self-correct until the
+  next `send()`. Accepted rather than fixed: the one-shot consumer this task
+  exists for sends exactly once and cannot trigger a second send to race
+  against, a 44 Hz streaming consumer self-corrects within about 22 ms, and
+  closing the race properly needs per-connection ordered writes, more
+  machinery than this fix is worth today.
 - A `resize` that fires before the capability arrives is a no-op: layout
   needs `cap`, and the handler returns early when it is null.
 - A surface wide enough that `pitch` rounds to 0 still draws, because
