@@ -146,6 +146,11 @@ gradient is skipped entirely and the pixel is drawn as a `fillRect` of
 width `ceil(pitch)`, which is both the legible rendering at that density
 and the cheap one.
 
+That rect's height is `max(24, min(80, H/4))`, a band rather than a square:
+at a sub-pixel pitch a square would be a single-pixel scratch, and the
+point of the dense path is that a run of same-coloured LEDs reads as a
+continuous block.
+
 ### 3.2 The canvas resizes only for a linear surface
 
 The `ring` and `stem` branches of `pos()` are hardcoded to absolute
