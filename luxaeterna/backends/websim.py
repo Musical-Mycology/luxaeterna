@@ -18,22 +18,39 @@ PAGE_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <style>
  body{background:#0b0b0f;margin:0;display:flex;height:100vh;
       align-items:center;justify-content:center}
- canvas{background:#0b0b0f}
+ canvas{background:#0b0b0f;max-width:100%}
  #s{position:fixed;top:8px;left:8px;color:#556;font:12px monospace}
 </style></head><body>
 <div id="s">connecting…</div><canvas id="c" width="320" height="420"></canvas>
 <script>
 const cv=document.getElementById('c'),cx=cv.getContext('2d'),st=document.getElementById('s');
-let cap=null;
+const MARGIN=20;
+let cap=null,linear=false,pitch=24,held=null;
 const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
 ws.binaryType='arraybuffer';
 ws.onopen=()=>st.textContent='connected';
 ws.onclose=()=>st.textContent='disconnected';
 ws.onmessage=(e)=>{
-  if(typeof e.data==='string'){cap=JSON.parse(e.data);st.textContent=cap.surface_id+' · '+cap.pixel_count+'px '+cap.color_order;return;}
-  if(!cap)return; draw(new Uint8Array(e.data));
+  if(typeof e.data==='string'){
+    cap=JSON.parse(e.data);
+    linear=!cap.zones.some(z=>z.name==='ring'||z.name==='stem');
+    st.textContent=cap.surface_id+' · '+cap.pixel_count+'px '+cap.color_order;
+    layout();return;
+  }
+  if(!cap)return; held=new Uint8Array(e.data); draw(held);
 };
+function layout(){
+  if(!cap)return;
+  if(linear){
+    cv.width=Math.max(320,window.innerWidth-40);
+    cv.height=Math.max(120,Math.min(420,window.innerHeight-80));
+    pitch=(cv.width-2*MARGIN)/Math.max(1,cap.pixel_count);
+  }else{cv.width=320;cv.height=420;pitch=24;}
+  if(held)draw(held);
+}
+window.addEventListener('resize',layout);
 function pos(i){
+  if(linear)return [MARGIN+(i+0.5)*pitch,cv.height/2];
   const ring=cap.zones.find(z=>z.name==='ring'),stem=cap.zones.find(z=>z.name==='stem');
   if(ring&&i>=ring.start&&i<ring.start+ring.count){
     const k=i-ring.start,a=-Math.PI/2+k*2*Math.PI/ring.count;
@@ -51,12 +68,15 @@ function rgb(f,i){
 }
 function draw(f){
   cx.clearRect(0,0,cv.width,cv.height);
+  const glow=Math.min(20,pitch*1.5),dot=Math.max(0.5,Math.min(7,pitch*0.4)),
+        dense=pitch<3,w=Math.ceil(pitch),h=Math.max(24,Math.min(80,cv.height/4));
   for(let i=0;i<cap.pixel_count;i++){
     const [x,y]=pos(i),c=rgb(f,i);
-    const g=cx.createRadialGradient(x,y,1,x,y,20);
+    if(dense){cx.fillStyle=c;cx.fillRect(x-pitch/2,y-h/2,w,h);continue;}
+    const g=cx.createRadialGradient(x,y,1,x,y,glow);
     g.addColorStop(0,c);g.addColorStop(1,'rgba(0,0,0,0)');
-    cx.fillStyle=g;cx.beginPath();cx.arc(x,y,20,0,2*Math.PI);cx.fill();
-    cx.fillStyle=c;cx.beginPath();cx.arc(x,y,7,0,2*Math.PI);cx.fill();
+    cx.fillStyle=g;cx.beginPath();cx.arc(x,y,glow,0,2*Math.PI);cx.fill();
+    cx.fillStyle=c;cx.beginPath();cx.arc(x,y,dot,0,2*Math.PI);cx.fill();
   }
 }
 </script></body></html>"""
@@ -116,6 +136,7 @@ class WebSimBackend(DMXBackend):
         self.label = label
         self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
         self.frames: list[bytes] = []
+        self._last_frame: bytes | None = None
         self._open = False
         self._server = None
         self._thread = None
@@ -148,6 +169,7 @@ class WebSimBackend(DMXBackend):
     def send(self, frame, universe_id: int = 0) -> None:
         payload = bytes(frame[:self._n])             # copy; never mutate frame
         self.frames.append(payload)
+        self._last_frame = payload
         if not self._serve:
             return
         with self._lock:
@@ -184,6 +206,14 @@ class WebSimBackend(DMXBackend):
             self._clients.add(connection)
         try:
             connection.send(json.dumps(capability_message(self._cap)))
+            # Reading once guards nothing (_last_frame is set once, in
+            # __init__, and never reset to None). Real, accepted gap: this
+            # connection is already in self._clients, so a concurrent send()
+            # can land a fresher frame ahead of this replay, leaving the
+            # client stale until the next send. See design doc section 6.
+            last = self._last_frame
+            if last is not None:
+                connection.send(last)
             for _ in connection:                     # hold open until close
                 pass
         except Exception:

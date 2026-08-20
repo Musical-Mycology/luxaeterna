@@ -5,6 +5,61 @@ two Musical Mycology sites put it in very different places. The input path — a
 therefore the message cost of a note or CC — is different at each. This document
 states which is which, because nothing else in the repo does.
 
+## Implementation status, verified 2026-08-20
+
+> **The matrix below describes the target architecture. Row 1 is still the only
+> row that exists**, but the reason rows 2 and 3 do not is no longer the reason
+> the previous revision of this note gave. Traced against `mm-terrarium@c94cdc5`
+> and `luxaeterna@97281ee`.
+>
+> **There is an Arco server process now.** `control/arco_process.py` spawns and
+> owns it and `control/boot.py` starts it as the first step of the load
+> sequence; shutdown is SIGTERM, because Arco has no message-based quit. There
+> is still no `arcoserver/` in mm-terrarium: the binary is Arco's own
+> `apps/pytest/server`, spawned on a pty.
+>
+> **pyarco and o2litepy are imported, always function-scoped.**
+> `control/arco_process.py:37`, `harness/arco_synth.py:91-93`,
+> `harness/o2_shroom.py:236`, `harness/run_stack.py:478`,
+> `harness/terrarium_boot.py:480`. Every one is marked lazy by design.
+> `control/audio.py` documents the module-level ban that keeps the offline
+> suite green. A previous revision of this note claimed zero such imports; that
+> came from a grep anchored at `^` which could not see an indented one.
+>
+> **The device wire is two paths now, chosen per run.** The default is still
+> plain JSON over a bare websocket (`devicelink/server.py:14,33`), with an
+> envelope that mirrors o2ws field-for-field without being o2ws. Opt in with
+> `--transport o2lite` and `devicelink/o2_transport.py` offers Control's `game`
+> service on the real Arco hub instead. That path has been run against a live
+> Arco and observed working (2026-08-13).
+>
+> **That did not advance rows 2 or 3, and the reason is the interesting part.**
+> What crosses the device wire is *rendered frames*, not MIDI:
+> `devicelink/agent.py:379` ships `universe.get_frame()[:36]` to a Tuneshroom,
+> and `:305` ships the Room its `channel_count` slice. luxaeterna renders inside
+> Control for every path that exists. Rows 2 and 3 both describe luxaeterna
+> running somewhere else and being fed `/light/midi`, and the architecture went
+> the other way: render centrally, ship pixels. A real device transport is
+> therefore not the missing piece for those rows.
+>
+> **`O2Bridge.attach()` still has no production caller.** `git grep "attach("`
+> over all of mm-terrarium returns nothing; `LightSession.attach()`
+> (`synth/session.py:44`) is reached only from `tests/synth/`. `O2Bridge.on_midi()`
+> *is* live, as an in-process queue shim. The class is instantiated; its o2lite
+> half has never executed. Unchanged since this note was first written, and the
+> single clearest signal that rows 2 and 3 are unbuilt.
+>
+> **A `DMXBackend` is instantiated now, just not on the Tuneshroom path.**
+> `WebSimBackend` at `harness/led_smoke.py:65`, `harness/o2_shroom.py:161` and
+> `harness/room_simulator.py:91`; `ArtNet` at `harness/array_smoke.py:46`. A
+> previous revision claimed the only `ArtNet(` anywhere was the usage example in
+> `luxaeterna/__init__.py:12`; that stopped being true when the venue-array
+> tooling landed.
+>
+> **Still true: nothing in Musical Mycology has driven a physical light.**
+> `harness/array_smoke.py` is the only Art-Net caller and it is standalone,
+> never plugged into `boot()`. The venue array remains simulated.
+
 ## The routing rule this follows
 
 From mm-terrarium's `docs/control-gameserver-design.md` § *Message Routing*
