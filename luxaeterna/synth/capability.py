@@ -79,10 +79,12 @@ def _first_tiling_fault(zones: list[Zone],
     """The first place `zones` fails to tile [0, pixel_count) exactly, as
     ("overlap", (name, name)) or ("gap", pixel), else None.
 
-    Sorted by start before walking, so the answer is in position order and a
-    caller's message does not depend on the order zones were declared in.
-    Assumes _check_bounds has run, so no zone reaches past pixel_count and the
-    cursor can only fall short of it, never overshoot."""
+    Sorted by start before walking, so which fault is reported, and the pixel
+    it is reported at, do not depend on the order zones were declared in. One
+    thing does: two zones sharing an identical (start, count) sort as a stable
+    tie, so an overlap between exactly those two names them in declaration
+    order. Assumes _check_bounds has run, so no zone reaches past pixel_count
+    and the cursor can only fall short of it, never overshoot."""
     cursor = 0
     previous = None
     for z in sorted(zones, key=lambda zone: (zone.start, zone.count)):
