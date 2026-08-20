@@ -144,3 +144,37 @@ def test_zones_may_tile_out_of_declaration_order():
                             [Zone("b", 10, 20), Zone("a", 0, 10),
                              Zone("primary", 0, 30)])
     assert [z.name for z in cap.zones] == ["b", "a", "primary"]
+
+
+def test_load_config_names_the_surface_and_the_missing_field():
+    """A capability config is the same kind of external, hand-authored
+    contract light_manifest is, so it gets the same located errors rather than
+    a bare KeyError with no indication of which surface."""
+    reg = CapabilityRegistry()
+    with pytest.raises(KeyError, match=r"surfaces\[1\].*pixel_count"):
+        reg.load_config({"surfaces": [
+            {"surface_id": "a", "pixel_count": 12, "color_order": "GRB",
+             "zones": []},
+            {"surface_id": "b", "color_order": "GRB", "zones": []}]})
+
+
+def test_load_config_names_the_zone_index_for_a_missing_zone_field():
+    reg = CapabilityRegistry()
+    with pytest.raises(KeyError, match=r"surfaces\[0\] zones\[0\].*count"):
+        reg.load_config({"surfaces": [
+            {"surface_id": "a", "pixel_count": 12, "color_order": "GRB",
+             "zones": [{"name": "ring", "start": 0}]}]})
+
+
+def test_load_config_registers_nothing_when_any_surface_is_invalid():
+    """Half a registry is worse than none: the caller has no way to tell which
+    surfaces made it in."""
+    reg = CapabilityRegistry()
+    with pytest.raises(ValueError, match="past the surface's 12 px"):
+        reg.load_config({"surfaces": [
+            {"surface_id": "good", "pixel_count": 12, "color_order": "GRB",
+             "zones": []},
+            {"surface_id": "bad", "pixel_count": 12, "color_order": "GRB",
+             "zones": [{"name": "ring", "start": 8, "count": 8}]}]})
+    with pytest.raises(KeyError, match="unknown surface"):
+        reg.get("good")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .manifest import _require
+
 _WHOLE_SURFACE = "primary"
 _SHROOM_ZONES = ("ring", "stem")
 
@@ -157,13 +159,29 @@ class CapabilityRegistry:
         return self._surfaces[surface_id]
 
     def load_config(self, config: dict) -> None:
-        for s in config.get("surfaces", []):
-            self.register(SurfaceCapability(
-                surface_id=s["surface_id"],
-                pixel_count=s["pixel_count"],
-                color_order=s["color_order"],
-                zones=[Zone(z["name"], z["start"], z["count"]) for z in s.get("zones", [])],
+        """Register every surface in `config`, or none of them.
+
+        Built in full before anything is registered: a config whose fourth
+        surface was invalid used to leave the first three registered and the
+        caller holding a half-loaded registry with no way to tell which.
+        Field errors are located the way light_manifest's already are, since a
+        capability config is the same kind of external, hand-authored
+        contract (see manifest._require). Zone validity is checked by
+        SurfaceCapability itself."""
+        loaded = []
+        for idx, s in enumerate(config.get("surfaces", [])):
+            where = f"capability config surfaces[{idx}]"
+            loaded.append(SurfaceCapability(
+                surface_id=_require(s, "surface_id", where),
+                pixel_count=_require(s, "pixel_count", where),
+                color_order=_require(s, "color_order", where),
+                zones=[Zone(_require(z, "name", f"{where} zones[{zi}]"),
+                            _require(z, "start", f"{where} zones[{zi}]"),
+                            _require(z, "count", f"{where} zones[{zi}]"))
+                       for zi, z in enumerate(s.get("zones", []))],
             ))
+        for cap in loaded:
+            self.register(cap)
 
 
 def shroom_capability(surface_id: str = "ie0") -> SurfaceCapability:
