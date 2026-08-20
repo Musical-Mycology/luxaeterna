@@ -82,6 +82,45 @@ function draw(f){
     cx.fillStyle=c;cx.beginPath();cx.arc(x,y,dot,0,2*Math.PI);cx.fill();
   }
 }
+/* --- operator input: gestures sent back over the same socket --------- */
+const TAP_DELAY_MS=250,TILT_MIN_MS=50,DRAG_PX=5;
+let tapTimer=null,dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0;
+function sendGesture(g){
+  if(ws.readyState!==1)return;
+  ws.send(JSON.stringify(g));
+  st.textContent='sent '+g.type+(g.type==='tap'?' x'+g.count:' '+g.gamma.toFixed(0)+'°');
+}
+function dragGamma(x){
+  const w=cv.clientWidth||cv.width;
+  const g=(x/Math.max(1,w))*180-90;
+  return Math.max(-90,Math.min(90,g));
+}
+cv.onclick=(e)=>{
+  if(dragMoved){dragMoved=false;return;}
+  if(tapTimer!==null)return;                      // second click of a pair
+  tapTimer=setTimeout(()=>{tapTimer=null;sendGesture({type:'tap',count:1});},TAP_DELAY_MS);
+};
+cv.ondblclick=(e)=>{
+  if(tapTimer!==null){clearTimeout(tapTimer);tapTimer=null;}
+  sendGesture({type:'tap',count:2});
+};
+cv.onpointerdown=(e)=>{dragging=true;dragMoved=false;dragX0=e.offsetX;lastTiltMs=0;};
+cv.onpointermove=(e)=>{
+  if(!dragging)return;
+  if(Math.abs(e.offsetX-dragX0)>DRAG_PX)dragMoved=true;
+  if(!dragMoved)return;
+  const now=Date.now();
+  if(now-lastTiltMs<TILT_MIN_MS)return;
+  lastTiltMs=now;
+  sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+};
+function endDrag(e){
+  if(!dragging)return;
+  dragging=false;
+  if(dragMoved)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+}
+cv.onpointerup=endDrag;
+cv.onpointerleave=endDrag;
 </script></body></html>"""
 
 
