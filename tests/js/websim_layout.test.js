@@ -142,6 +142,68 @@ test('a zero-pixel capability draws nothing and does not throw', () => {
   assert.strictEqual(marks(canvas).length, 0);
 });
 
+// --- Task 3: a linear surface fits the canvas -----------------------------
+
+test('an 864px linear surface draws every pixel within canvas bounds', () => {
+  const { canvas } = run(linearCap(864), new Uint8Array(864 * 3), { w: 1440, h: 900 });
+  const pts = marks(canvas);
+  assert.strictEqual(pts.length, 864, `drew ${pts.length} marks, want 864`);
+  for (const [x, y] of pts) {
+    assert.ok(x >= 0 && x <= canvas.width,
+      `x ${x} outside 0..${canvas.width}`);
+    assert.ok(y >= 0 && y <= canvas.height,
+      `y ${y} outside 0..${canvas.height}`);
+  }
+});
+
+test('an 864px linear surface is strictly increasing and evenly spaced', () => {
+  const { canvas } = run(linearCap(864), new Uint8Array(864 * 3), { w: 1440, h: 900 });
+  const xs = marks(canvas).map((p) => p[0]);
+  const step = xs[1] - xs[0];
+  assert.ok(step > 0, 'positions must increase left to right');
+  for (let i = 1; i < xs.length; i++) {
+    assert.ok(xs[i] > xs[i - 1], `position ${i} did not increase`);
+    assert.ok(Math.abs((xs[i] - xs[i - 1]) - step) < 1e-9,
+      `uneven spacing at ${i}: ${xs[i] - xs[i - 1]} vs ${step}`);
+  }
+});
+
+test('a dense linear surface draws marks at least one pixel wide', () => {
+  const { canvas } = run(linearCap(864), new Uint8Array(864 * 3), { w: 1440, h: 900 });
+  const widths = canvas.ops.filter((o) => o[0] === 'fillRect').map((o) => o[3]);
+  assert.strictEqual(widths.length, 864,
+    'a sub-3px pitch should draw rects, not radial gradients');
+  for (const w of widths) assert.ok(w >= 1, `mark width ${w} is under one pixel`);
+});
+
+test('a sparse linear surface still gets round glowing dots', () => {
+  const { canvas } = run(linearCap(60), new Uint8Array(60 * 3), { w: 800, h: 600 });
+  const arcs = canvas.ops.filter((o) => o[0] === 'arc');
+  assert.ok(arcs.length > 0, 'a 12.7px pitch should draw arcs, not rects');
+  const radii = arcs.map((o) => o[3]);
+  for (const r of radii) assert.ok(r > 0, `radius ${r} must be positive`);
+});
+
+test('a resize before the capability arrives is a no-op', () => {
+  /* The listener is registered at script load, so a browser resized during
+     the connect handshake fires it with no cap and no canvas geometry. */
+  const { canvas, listeners } = run(null, null, { w: 1440, h: 900 });
+  assert.ok(listeners.resize, 'the page must register a resize listener');
+  assert.doesNotThrow(() => listeners.resize());
+  assert.strictEqual(canvas.ops.length, 0, 'nothing may be drawn before cap');
+});
+
+test('a resize relays out and repaints the last frame', () => {
+  const { canvas, listeners } = run(linearCap(864), new Uint8Array(864 * 3),
+                                    { w: 1440, h: 900 });
+  const before = marks(canvas).length;
+  assert.ok(listeners.resize, 'the page must register a resize listener');
+  canvas.ops.length = 0;
+  listeners.resize();
+  assert.strictEqual(marks(canvas).length, before,
+    'a resize must repaint every pixel of the held frame');
+});
+
 // --- runner --------------------------------------------------------------
 
 let failed = 0;
