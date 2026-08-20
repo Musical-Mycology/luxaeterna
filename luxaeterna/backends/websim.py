@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import threading
 
 from .base import DMXBackend
 from ..synth.capability import SurfaceCapability, shroom_capability
+
+logger = logging.getLogger(__name__)
 
 
 PAGE_HTML = """<!doctype html><html><head><meta charset="utf-8">
@@ -123,17 +126,26 @@ class WebSimBackend(DMXBackend):
         e.g. ``"sim-room"`` or a device id — lets an operator tell two open
         browser tabs apart. ``None`` (default) leaves the title unchanged.
         Stored verbatim on ``self.label`` for introspection.
+    on_input : callable or None
+        Called with the decoded dict for every inbound JSON **text**
+        message a connected page sends (the input side of the two-way
+        seam). Runs on the websocket handler thread; hand off to your
+        own loop if you need one. Binary frames, malformed JSON and
+        non-dict payloads are dropped. ``None`` (default) drains and
+        discards inbound, exactly as before this seam existed.
     """
 
     def __init__(self, capability: SurfaceCapability | None = None,
                  host: str = "127.0.0.1", port: int = 0,
-                 serve: bool = True, label: str | None = None) -> None:
+                 serve: bool = True, label: str | None = None,
+                 on_input=None) -> None:
         self._cap = capability or shroom_capability()
         self._n = self._cap.pixel_count * 3          # bytes we care about
         self._host = host
         self._port = port
         self._serve = serve
         self.label = label
+        self.on_input = on_input
         self._page_html = PAGE_HTML if label is None else _labeled_page_html(label)
         self.frames: list[bytes] = []
         self._last_frame: bytes | None = None
@@ -214,8 +226,20 @@ class WebSimBackend(DMXBackend):
             last = self._last_frame
             if last is not None:
                 connection.send(last)
-            for _ in connection:                     # hold open until close
-                pass
+            for raw in connection:               # hold open until close
+                if not isinstance(raw, str):
+                    continue                     # frames only flow down
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    logger.debug("dropping malformed inbound JSON")
+                    continue
+                if not isinstance(msg, dict) or self.on_input is None:
+                    continue
+                try:
+                    self.on_input(msg)
+                except Exception:
+                    logger.debug("on_input callback raised", exc_info=True)
         except Exception:
             pass
         finally:
