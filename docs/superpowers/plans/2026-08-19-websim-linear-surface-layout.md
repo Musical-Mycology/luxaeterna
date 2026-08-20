@@ -171,8 +171,18 @@ In `_handle()`, after the capability write:
                 pass
 ```
 
-Note the local `last`. Reading the attribute once means a concurrent `send()`
-cannot make the `is not None` check and the write disagree.
+Note the local `last`. It reads the attribute once rather than twice, which is
+tidy but guards nothing: `_last_frame` is set to `None` only in `__init__` and
+never reset, so the `is not None` check and the write cannot disagree.
+
+The real, accepted limitation is one line above. `self._clients.add(connection)`
+happens BEFORE these writes, so a concurrent `send(B)` can reach this socket
+between the read of `last = A` and its write, leaving the client on the older
+frame until the next send. This is knowingly not closed: the one-shot consumer
+this task exists for sends exactly once, so the race needs a second send and
+cannot occur there, and a 44 Hz streaming consumer overwrites the stale frame
+within ~22 ms. Closing it properly needs per-connection ordered writes, which is
+more machinery than this fix is worth today. Record it, do not build it.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -275,7 +285,12 @@ function makeCanvas() {
 
 /* Run the page script against one capability and (optionally) one frame.
    Returns the canvas stub, the status-line stub and the registered window
-   listeners, so a test can also fire a resize. */
+   listeners, so a test can also fire a resize.
+
+   Pass cap as null to model a browser that has connected but not yet been
+   handed the capability blob. That is a real state the page must survive:
+   the resize listener is registered at script load, so a window resized
+   mid-handshake fires it before any geometry exists. */
 function run(cap, frameBytes, viewport) {
   const canvas = makeCanvas();
   const status = { textContent: '' };
@@ -296,7 +311,7 @@ function run(cap, frameBytes, viewport) {
 
   const sock = sandbox.__sock;
   assert.ok(sock, 'the page script did not construct a WebSocket');
-  sock.onmessage({ data: JSON.stringify(cap) });          // capability first
+  if (cap) sock.onmessage({ data: JSON.stringify(cap) });  // capability first
   if (frameBytes) sock.onmessage({ data: new Uint8Array(frameBytes) });
   return { canvas, status, listeners, sock };
 }
@@ -556,20 +571,7 @@ test('a sparse linear surface still gets round glowing dots', () => {
 test('a resize before the capability arrives is a no-op', () => {
   /* The listener is registered at script load, so a browser resized during
      the connect handshake fires it with no cap and no canvas geometry. */
-  const canvas = makeCanvas();
-  const listeners = {};
-  const sandbox = {
-    console, Math, JSON, Uint8Array,
-    location: { protocol: 'http:', host: 'localhost:1' },
-    document: { getElementById: (id) => (id === 'c' ? canvas : { textContent: '' }) },
-    window: {
-      innerWidth: 1440, innerHeight: 900,
-      addEventListener: (name, fn) => { listeners[name] = fn; },
-    },
-  };
-  sandbox.WebSocket = function () { sandbox.__sock = this; };
-  vm.createContext(sandbox);
-  vm.runInContext(source, sandbox);
+  const { canvas, listeners } = run(null, null, { w: 1440, h: 900 });
   assert.ok(listeners.resize, 'the page must register a resize listener');
   assert.doesNotThrow(() => listeners.resize());
   assert.strictEqual(canvas.ops.length, 0, 'nothing may be drawn before cap');
