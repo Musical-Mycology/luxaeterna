@@ -106,7 +106,8 @@ cv.onpointermove=(e)=>{
   sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
 };
 cv.onpointerup=(e)=>{
-  const wasDrag=dragging&&dragMoved;
+  if(!dragging)return;
+  const wasDrag=dragMoved;
   dragging=false;
   if(wasDrag)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
   else sendGesture({type:'tap',count:1});

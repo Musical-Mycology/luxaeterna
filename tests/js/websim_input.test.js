@@ -64,6 +64,12 @@ test('a tap sends immediately on pointerup, no delay window', () => {
   assert.deepStrictEqual(gestures(), [{ type: 'tap', count: 1 }]);
 });
 
+test('a pointerup with no preceding pointerdown sends nothing', () => {
+  const { canvas, gestures } = run();
+  canvas.onpointerup({ offsetX: 100, offsetY: 100 });
+  assert.deepStrictEqual(gestures(), []);
+});
+
 test('a drag maps canvas x onto gamma in [-90, 90]', () => {
   const { canvas, gestures } = run();
   canvas.onpointerdown({ offsetX: 160, offsetY: 100 });
