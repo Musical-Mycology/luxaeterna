@@ -83,8 +83,8 @@ function draw(f){
   }
 }
 /* --- operator input: gestures sent back over the same socket --------- */
-const TAP_DELAY_MS=250,TILT_MIN_MS=50,DRAG_PX=5;
-let tapTimer=null,dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0;
+const TILT_MIN_MS=50,DRAG_PX=5;
+let dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0;
 function sendGesture(g){
   if(ws.readyState!==1)return;
   ws.send(JSON.stringify(g));
@@ -95,15 +95,6 @@ function dragGamma(x){
   const g=(x/Math.max(1,w))*180-90;
   return Math.max(-90,Math.min(90,g));
 }
-cv.onclick=(e)=>{
-  if(dragMoved){dragMoved=false;return;}
-  if(tapTimer!==null)return;                      // second click of a pair
-  tapTimer=setTimeout(()=>{tapTimer=null;sendGesture({type:'tap',count:1});},TAP_DELAY_MS);
-};
-cv.ondblclick=(e)=>{
-  if(tapTimer!==null){clearTimeout(tapTimer);tapTimer=null;}
-  sendGesture({type:'tap',count:2});
-};
 cv.onpointerdown=(e)=>{dragging=true;dragMoved=false;dragX0=e.offsetX;lastTiltMs=0;};
 cv.onpointermove=(e)=>{
   if(!dragging)return;
@@ -114,13 +105,17 @@ cv.onpointermove=(e)=>{
   lastTiltMs=now;
   sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
 };
-function endDrag(e){
+cv.onpointerup=(e)=>{
+  const wasDrag=dragging&&dragMoved;
+  dragging=false;
+  if(wasDrag)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+  else sendGesture({type:'tap',count:1});
+};
+cv.onpointerleave=(e)=>{
   if(!dragging)return;
   dragging=false;
   if(dragMoved)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
-}
-cv.onpointerup=endDrag;
-cv.onpointerleave=endDrag;
+};
 </script></body></html>"""
 
 
