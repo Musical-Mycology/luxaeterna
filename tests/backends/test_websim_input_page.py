@@ -27,7 +27,9 @@ def _page_script() -> str:
 def test_page_declares_input_handlers():
     script = _page_script()
     assert "onpointerdown" in script
-    assert "ondblclick" in script
+    assert "onpointerup" in script
+    assert "TAP_DELAY_MS" not in script
+    assert "ondblclick" not in script
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

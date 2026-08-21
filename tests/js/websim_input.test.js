@@ -57,21 +57,17 @@ function run() {
   return { canvas, sock, fireTimers, gestures };
 }
 
-test('a single click sends tap count 1 after the delay window', () => {
-  const { canvas, fireTimers, gestures } = run();
-  canvas.onclick({ offsetX: 100, offsetY: 100 });
-  assert.deepStrictEqual(gestures(), []);       // held for the dblclick window
-  fireTimers();
+test('a tap sends immediately on pointerup, no delay window', () => {
+  const { canvas, gestures } = run();
+  canvas.onpointerdown({ offsetX: 100, offsetY: 100 });
+  canvas.onpointerup({ offsetX: 100, offsetY: 100 });
   assert.deepStrictEqual(gestures(), [{ type: 'tap', count: 1 }]);
 });
 
-test('a double click sends exactly one tap count 2', () => {
-  const { canvas, fireTimers, gestures } = run();
-  canvas.onclick({ offsetX: 100, offsetY: 100 });
-  canvas.onclick({ offsetX: 100, offsetY: 100 });
-  canvas.ondblclick({ offsetX: 100, offsetY: 100 });
-  fireTimers();
-  assert.deepStrictEqual(gestures(), [{ type: 'tap', count: 2 }]);
+test('a pointerup with no preceding pointerdown sends nothing', () => {
+  const { canvas, gestures } = run();
+  canvas.onpointerup({ offsetX: 100, offsetY: 100 });
+  assert.deepStrictEqual(gestures(), []);
 });
 
 test('a drag maps canvas x onto gamma in [-90, 90]', () => {
@@ -95,21 +91,19 @@ test('drag tilts are rate-bounded to one per 50 ms', () => {
   assert.ok(tilts.length <= 2, `expected <= 2 tilts, got ${tilts.length}`);
 });
 
-test('a real drag suppresses the click that follows it', () => {
-  const { canvas, fireTimers, gestures } = run();
+test('a real drag suppresses the tap that follows it', () => {
+  const { canvas, gestures } = run();
   canvas.onpointerdown({ offsetX: 100, offsetY: 100 });
   canvas.onpointermove({ offsetX: 200, offsetY: 100 });
   canvas.onpointerup({ offsetX: 200, offsetY: 100 });
-  canvas.onclick({ offsetX: 200, offsetY: 100 });        // browsers still fire it
-  fireTimers();
   assert.deepStrictEqual(gestures().filter((g) => g.type === 'tap'), []);
 });
 
 test('nothing is sent when the socket is not open', () => {
-  const { canvas, sock, fireTimers, gestures } = run();
+  const { canvas, sock, gestures } = run();
   sock.readyState = 3;                                    // CLOSED
-  canvas.onclick({ offsetX: 100, offsetY: 100 });
-  fireTimers();
+  canvas.onpointerdown({ offsetX: 100, offsetY: 100 });
+  canvas.onpointerup({ offsetX: 100, offsetY: 100 });
   assert.deepStrictEqual(gestures(), []);
 });
 
