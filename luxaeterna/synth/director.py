@@ -43,6 +43,7 @@ class StatusDirector:
         self._overlay_binding: ActiveBinding | None = None
         self._prior = IDLE                    # state to restore after SELFTEST
         self._fails: dict[int, int] = {}
+        self._had_bit_bindings = False
         self._enter_idle()
 
     # -- internals ----------------------------------------------------------
@@ -57,6 +58,7 @@ class StatusDirector:
 
     def _drop_bit(self) -> None:
         self.bit_bindings = []
+        self._had_bit_bindings = False
         self._fails = {}
         self.bit_name = ""
         self.role = ""
@@ -94,6 +96,11 @@ class StatusDirector:
             self._enter_error()
             return
         self.bit_bindings = bindings
+        # A manifest may legitimately declare zero instruments (a role that
+        # asked for no light, e.g. a tilt-only jammer). note_failures needs
+        # to tell that apart from "every binding was quarantined", which is
+        # only possible if we remember whether any binding ever existed.
+        self._had_bit_bindings = bool(bindings)
         self._fails = {}
         self.bit_name = manifest.bit_name
         self.role = manifest.role
@@ -219,5 +226,6 @@ class StatusDirector:
                                   self.bit_name, self.role)
             else:
                 self._fails.pop(id(b), None)
-        if self.state == RUNNING and not self.bit_bindings:
+        if (self.state == RUNNING and not self.bit_bindings
+                and self._had_bit_bindings):
             self.error("all bindings quarantined")
