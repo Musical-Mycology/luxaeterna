@@ -206,3 +206,18 @@ def test_glow_welcome_renders_lit():
                         positions=np.linspace(0, 1, 12), n=12, channels=3)
     out = d._sig_binding.render(ctx)
     assert out.max() > 0.0                       # the welcome pathway is lit
+
+
+def test_empty_manifest_role_runs_dark_without_error():
+    # A role may legitimately declare NO light instruments (e.g. TestBit's
+    # jammer, tilt-only). Zero bindings at RUNNING is that declaration, not
+    # "every binding was quarantined" -- the session must stay RUNNING and
+    # render dark, never escalate to ERROR.
+    m = LightManifest.from_dict({
+        "bit_name": "testbit", "role": "jammer", "instruments": []})
+    d = _mk()
+    d.swap(m)
+    _run(d, 2.0)
+    assert d.state == RUNNING
+    d.note_failures([])
+    assert d.state == RUNNING
