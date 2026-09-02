@@ -7,7 +7,13 @@ when the session lives in the driver's own process, or o2lite when it does not.
 Where attach() is used, the o2lite handler is registered exactly once per
 process and closes over this session — never over bindings — so bit swaps can
 never leak into o2litepy's append-only handler table. All graph mutation happens
-on the render thread at frame boundaries (queue drain), on both paths."""
+on the render thread at frame boundaries (queue drain), on both paths.
+
+Time: render_into hands ugens the injected clock's reading as t, unmodified;
+dt is the delta since the previous read (first frame 1e-6). Sessions that
+share a clock agree on t, so a phase-from-time instrument (rainbow, LFO,
+noise) is continuous across sessions. Anything needing a local origin
+integrates dt; t never starts near zero and must not be assumed to."""
 
 from __future__ import annotations
 

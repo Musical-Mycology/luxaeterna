@@ -34,10 +34,12 @@ class LightEngine:
     """Composites whatever binding list it is handed into DMX bytes.
 
     Timing (t/dt/frame) is supplied by the caller — the LightSession owns the
-    clock. Per-binding exceptions are swallowed and the offenders returned so
-    the director can quarantine repeat failures; one bad binding never costs
-    the rest of the surface its frame. Zone positions are cached lazily by
-    zone name because the binding list changes at runtime (bit swaps)."""
+    clock, and t is that clock's raw reading (shared across every session on
+    the same clock), not seconds since this engine's first frame. Per-binding
+    exceptions are swallowed and the offenders returned so the director can
+    quarantine repeat failures; one bad binding never costs the rest of the
+    surface its frame. Zone positions are cached lazily by zone name because
+    the binding list changes at runtime (bit swaps)."""
 
     def __init__(self, cap: SurfaceCapability) -> None:
         self.cap = cap
