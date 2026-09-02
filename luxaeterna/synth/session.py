@@ -13,7 +13,8 @@ Time: render_into hands ugens the injected clock's reading as t, unmodified;
 dt is the delta since the previous read (first frame 1e-6). Sessions that
 share a clock agree on t, so a phase-from-time instrument (rainbow, LFO,
 noise) is continuous across sessions. Anything needing a local origin
-integrates dt; t never starts near zero and must not be assumed to."""
+integrates dt; t starts wherever the clock is, usually not near zero, and
+must never be assumed to."""
 
 from __future__ import annotations
 
