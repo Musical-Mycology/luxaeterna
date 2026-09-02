@@ -126,3 +126,71 @@ def test_midi_overflow_warns_throttled(monkeypatch, caplog):
     overflow = [r for r in caplog.records if "overflow" in r.getMessage()]
     assert len(overflow) == 1
     assert "744" in overflow[0].getMessage()   # 1000 - 256 dropped
+
+
+def _probe(session):
+    """Wrap the engine so each render_into records the (t, dt) the session
+    handed it. The engine is the only consumer of t, so this is the seam
+    that observes the session's clock contract without a ugen in the way."""
+    seen = []
+    real = session._engine.render_into
+
+    def spy(universe, bindings, t, dt, frame, gain=1.0):
+        seen.append((t, dt))
+        return real(universe, bindings, t, dt, frame, gain)
+
+    session._engine.render_into = spy
+    return seen
+
+
+def test_t_is_the_clock_reading_not_elapsed_since_first_render():
+    cap = shroom_capability("ie3")
+    clk = iter([1000.0, 1000.02, 1000.04]).__next__
+    session = LightSession(cap, clock=clk)
+    seen = _probe(session)
+    uni = Universe()
+    for _ in range(3):
+        session.render_into(uni)
+    assert [t for t, _ in seen] == [1000.0, 1000.02, 1000.04]
+
+
+def test_two_sessions_first_rendered_at_different_readings_agree_on_t():
+    # The property the change exists for: mm-terrarium builds one session
+    # per Room fixture, each first rendered at a slightly different instant,
+    # and all of them must read the same t for the same clock value.
+    cap = shroom_capability("ie3")
+    a = LightSession(cap, clock=iter([10.0, 900.0]).__next__)
+    b = LightSession(cap, clock=iter([500.0, 900.0]).__next__)
+    seen_a, seen_b = _probe(a), _probe(b)
+    uni = Universe()
+    a.render_into(uni); b.render_into(uni)      # construction skew
+    a.render_into(uni); b.render_into(uni)      # the same clock value
+    assert seen_a[1][0] == seen_b[1][0] == 900.0
+
+
+def test_first_frame_dt_is_the_small_constant_and_later_dt_is_the_delta():
+    cap = shroom_capability("ie3")
+    clk = iter([1000.0, 1000.02, 1000.05]).__next__
+    session = LightSession(cap, clock=clk)
+    seen = _probe(session)
+    uni = Universe()
+    for _ in range(3):
+        session.render_into(uni)
+    dts = [dt for _, dt in seen]
+    assert dts[0] == 1e-6
+    assert abs(dts[1] - 0.02) < 1e-9
+    assert abs(dts[2] - 0.03) < 1e-9
+
+
+def test_a_stalled_clock_never_yields_a_zero_dt():
+    # A frozen or backwards clock (a hub restart resets o2lite time) must
+    # not hand ugens dt == 0 or a negative dt: Smooth divides by tau and
+    # SegmentLevel integrates dt, so the floor is what keeps them sane.
+    cap = shroom_capability("ie3")
+    clk = iter([50.0, 50.0, 49.0]).__next__
+    session = LightSession(cap, clock=clk)
+    seen = _probe(session)
+    uni = Universe()
+    for _ in range(3):
+        session.render_into(uni)
+    assert [dt for _, dt in seen] == [1e-6, 1e-6, 1e-6]

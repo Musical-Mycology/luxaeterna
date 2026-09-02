@@ -36,8 +36,7 @@ class LightSession:
         self._director = StatusDirector(cap)
         self._engine = LightEngine(cap)
         self._frame = 0
-        self._start: float | None = None
-        self._last: float | None = None
+        self._last: float | None = None    # previous clock reading, for dt
 
     # -- wiring (once, at device startup) -----------------------------------
 
@@ -95,13 +94,21 @@ class LightSession:
     # -- render thread (wire as OutputLoop's on_frame) ----------------------
 
     def render_into(self, universe) -> None:
+        # t is the injected clock's own reading, not elapsed time since this
+        # session's first frame. Every session handed the same clock (every
+        # Room fixture session on a Terrarium, in o2lite mode) therefore
+        # agrees on t, which is what lets one rainbow declaration paint a
+        # continuous gradient across fixtures rendered by different
+        # sessions. Anything that needs a local origin integrates dt
+        # (Envelope, SegmentLevel, Smooth, the status signatures); nothing
+        # may assume t starts near zero.
         now = self._clock()
-        if self._start is None:
-            self._start = now
-            self._last = now
-        t = now - self._start
-        dt = max(now - self._last, 1e-6)
+        if self._last is None:
+            dt = 1e-6                        # first frame: no previous read
+        else:
+            dt = max(now - self._last, 1e-6)  # floor: stalled or reset clock
         self._last = now
+        t = now
 
         for ev in self._queue.drain():
             self._apply(ev)
