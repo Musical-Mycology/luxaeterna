@@ -23,6 +23,17 @@ MANIFEST = {
     }]
 }
 
+RAINBOW_MANIFEST = {
+    "bit_name": "cont", "instruments": [{
+        "instrument": "rainbow", "target": "primary",
+        # level declared so the breath is externally driven (a constant
+        # here) rather than SegmentLevel's local clock, matching how
+        # mm-terrarium's TestBit declares the Room rainbow.
+        "params": {"hue": 0.0, "level": 1.0, "span": 1.0, "speed": 0.05},
+    }],
+    "welcome": {"instrument": "glow", "duration": 0.5},
+}
+
 
 def _mk(dt=0.02, steps=600):
     cap = shroom_capability("ie3")
@@ -194,3 +205,50 @@ def test_a_stalled_clock_never_yields_a_zero_dt():
     for _ in range(3):
         session.render_into(uni)
     assert [dt for _, dt in seen] == [1e-6, 1e-6, 1e-6]
+
+
+def test_full_lifecycle_with_a_large_first_clock_reading():
+    # An O2 clock that has been running for a long time before this session
+    # was built: welcome (glow) -> running -> close fade -> idle must all
+    # complete, because every signature keeps its own dt-integrated clock.
+    cap = shroom_capability("ie3")
+    clk = iter([1e6 + i * 0.02 for i in range(600)]).__next__
+    session = build_session(LightManifest.from_dict(RAINBOW_MANIFEST), cap, clock=clk)
+    uni = Universe()
+    session.render_into(uni)
+    assert session.state == "loading"
+    _run_until(session, uni, "running")
+    session.clear()
+    session.render_into(uni)
+    assert session.state == "closing"
+    _run_until(session, uni, "idle")
+
+
+def test_rainbow_frames_agree_across_sessions_at_the_same_clock_value():
+    # Two sessions, first rendered 490 s apart (the construction skew two
+    # Room fixtures have), both RUNNING, then rendered at the same clock
+    # reading: byte-identical frames. Before this slice each session's
+    # t started at zero at ITS first frame, so the two rainbows were offset
+    # by 490 s of scroll.
+    cap = shroom_capability("ie3")
+
+    def running_session(first):
+        clk = iter([first + i * 0.02 for i in range(200)] + [5000.0, 5000.02]).__next__
+        s = build_session(LightManifest.from_dict(RAINBOW_MANIFEST), cap, clock=clk)
+        u = Universe()
+        _run_until(s, u, "running")
+        return s, u
+
+    a, ua = running_session(10.0)
+    b, ub = running_session(500.0)
+    # Drain each schedule to its 5000.0 entry so both render at the same
+    # clock reading. The session's _last is the previous clock read, which
+    # is the cheapest honest way to know which entry was just consumed.
+    for s, u in ((a, ua), (b, ub)):
+        while s._last != 5000.0:
+            s.render_into(u)
+    assert ua.get_frame()[:36] == ub.get_frame()[:36]
+    assert max(ua.get_frame()[:36]) > 0
+    # And it is not a constant frame: one more tick (5000.02) moves the hue.
+    a.render_into(ua)
+    assert ua.get_frame()[:36] != ub.get_frame()[:36]

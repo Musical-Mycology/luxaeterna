@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from luxaeterna.synth.signal import RenderContext
 from luxaeterna.synth.ugens import (Const, SolidColor, Gradient,
-                                     PaletteMap, Bloom, Noise)
+                                     PaletteMap, Bloom, Noise, Rainbow, SegmentLevel)
 
 
 def ctx(frame=0, n=8, channels=3, time=0.0, dt=1 / 44):
@@ -54,3 +54,37 @@ def test_bloom_and_noise_pad_narrow_color_to_channels():
     assert b.render(ctx(n=5, channels=4)).shape == (5, 4)
     nse = Noise(Const([1.0, 0.5, 0.2]), scale=3.0, speed=1.0)
     assert nse.render(ctx(n=5, channels=4)).shape == (5, 4)
+
+
+def test_rainbow_and_noise_depend_only_on_absolute_time():
+    # Two fresh instances at the same t are identical, and an instance that
+    # rendered a different history first lands on the same frame. This is
+    # what makes two fixture sessions sharing a clock paint one gradient.
+    def rainbow():
+        return Rainbow(Const(1.0), Const(0.0), span=1.0, speed=0.05)
+    a, b = rainbow(), rainbow()
+    for f, t in enumerate([0.0, 7.0, 99.0]):
+        a.render(ctx(frame=f, time=t))
+    fa = a.render(ctx(frame=3, time=518000.25))
+    fb = b.render(ctx(frame=0, time=518000.25))
+    assert np.array_equal(fa, fb)
+    assert fa.max() > 0.0
+
+    na, nb = Noise(Const([1, 1, 1]), scale=2.0, speed=3.0), Noise(Const([1, 1, 1]), scale=2.0, speed=3.0)
+    for f, t in enumerate([0.0, 7.0]):
+        na.render(ctx(frame=f, time=t))
+    assert np.array_equal(na.render(ctx(frame=2, time=518000.25)),
+                          nb.render(ctx(frame=0, time=518000.25)))
+
+
+def test_segment_level_loop_is_local_time_not_absolute():
+    # loop_from wraps the ugen's OWN integrated time. A large absolute t on
+    # the first frame must not be read as "already past the end".
+    def run(times, dt=0.5):
+        lvl = SegmentLevel([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)], loop_from=0.0)
+        return [float(lvl.render(ctx(frame=f, time=t, dt=dt)))
+                for f, t in enumerate(times)]
+    near = [f * 0.5 for f in range(5)]
+    far = [1e6 + f * 0.5 for f in range(5)]
+    assert run(near) == run(far)
+    assert abs(run(far)[-1] - 0.5) < 1e-6      # wrapped to local 0.5, as before

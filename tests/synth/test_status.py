@@ -74,3 +74,27 @@ def test_builtins_registered_and_overridable():
         assert registry.build("sys:error").duration == 0.1
     finally:
         registry.register("sys:error", _sig_error)   # restore the built-in
+
+
+def test_signatures_advance_on_dt_and_render_the_same_at_any_absolute_time():
+    # Welcome, loaded, error and the close fade all keep their own elapsed
+    # clock from dt. A session whose first t is 1e6 (an O2 clock that has
+    # been up for days) must play them exactly as one starting at zero.
+    def play(name, offset, frames=40, dt=0.05):
+        sig = registry.build(name)
+        out = []
+        for f in range(frames):
+            sig.advance(dt)
+            c = RenderContext(time=offset + f * dt, frame=f, dt=dt,
+                              positions=np.linspace(0, 1, 12), n=12, channels=3)
+            out.append((sig.gain, sig.done,
+                        sig.render(c).copy() if sig.renders else None))
+        return out
+
+    for name in ("sys:loaded", "sys:error", "sys:closing", "sys:idle",
+                 "sys:disconnected", "sys:selftest"):
+        near, far = play(name, 0.0), play(name, 1e6)
+        for (g1, d1, f1), (g2, d2, f2) in zip(near, far):
+            assert (g1, d1) == (g2, d2), name
+            if f1 is not None:
+                assert np.array_equal(f1, f2), name
