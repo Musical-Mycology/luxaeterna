@@ -7,7 +7,14 @@ when the session lives in the driver's own process, or o2lite when it does not.
 Where attach() is used, the o2lite handler is registered exactly once per
 process and closes over this session — never over bindings — so bit swaps can
 never leak into o2litepy's append-only handler table. All graph mutation happens
-on the render thread at frame boundaries (queue drain), on both paths."""
+on the render thread at frame boundaries (queue drain), on both paths.
+
+Time: render_into hands ugens the injected clock's reading as t, unmodified;
+dt is the delta since the previous read (first frame 1e-6). Sessions that
+share a clock agree on t, so a phase-from-time instrument (rainbow, LFO,
+noise) is continuous across sessions. Anything needing a local origin
+integrates dt; t starts wherever the clock is, usually not near zero, and
+must never be assumed to."""
 
 from __future__ import annotations
 
@@ -36,8 +43,7 @@ class LightSession:
         self._director = StatusDirector(cap)
         self._engine = LightEngine(cap)
         self._frame = 0
-        self._start: float | None = None
-        self._last: float | None = None
+        self._last: float | None = None    # previous clock reading, for dt
 
     # -- wiring (once, at device startup) -----------------------------------
 
@@ -95,13 +101,21 @@ class LightSession:
     # -- render thread (wire as OutputLoop's on_frame) ----------------------
 
     def render_into(self, universe) -> None:
+        # t is the injected clock's own reading, not elapsed time since this
+        # session's first frame. Every session handed the same clock (every
+        # Room fixture session on a Terrarium, in o2lite mode) therefore
+        # agrees on t, which is what lets one rainbow declaration paint a
+        # continuous gradient across fixtures rendered by different
+        # sessions. Anything that needs a local origin integrates dt
+        # (Envelope, SegmentLevel, Smooth, the status signatures); nothing
+        # may assume t starts near zero.
         now = self._clock()
-        if self._start is None:
-            self._start = now
-            self._last = now
-        t = now - self._start
-        dt = max(now - self._last, 1e-6)
+        if self._last is None:
+            dt = 1e-6                        # first frame: no previous read
+        else:
+            dt = max(now - self._last, 1e-6)  # floor: stalled or reset clock
         self._last = now
+        t = now
 
         for ev in self._queue.drain():
             self._apply(ev)

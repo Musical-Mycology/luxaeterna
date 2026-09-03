@@ -120,3 +120,43 @@ def test_huecolor_tracks_changing_hue():
     src.set_target(0.33)
     g = hc.render(ctx(1))                                 # now green
     assert g[1] > g[0] and g[1] > g[2]
+
+
+def _run(ugen, times, dt=1 / 44):
+    return [float(ugen.render(ctx(f, time=t, dt=dt))) for f, t in enumerate(times)]
+
+
+def test_dt_integrators_ignore_absolute_time():
+    # Since the session hands ugens the raw clock reading as t (large, and
+    # never starting at zero), anything with a local origin must build it
+    # from dt alone. Same dt sequence at t near zero and at t = 1e6 must
+    # produce byte-identical output for every dt-integrating control ugen.
+    n = 30
+    near = [f / 44 for f in range(n)]
+    far = [1e6 + f / 44 for f in range(n)]
+
+    def fresh():
+        s = Smooth(Const(0.0), tau=0.1)
+        e = Envelope(attack=0.1, decay=0.1, sustain=0.5, release=0.2)
+        e.gate_on()
+        return s, e
+
+    s1, e1 = fresh()
+    s1.set_target(1.0)
+    s2, e2 = fresh()
+    s2.set_target(1.0)
+    assert _run(s1, near) == _run(s2, far)
+    assert _run(e1, near) == _run(e2, far)
+
+
+def test_time_readers_depend_only_on_absolute_time():
+    # LFO reads ctx.time and nothing else: two instances agree at the same
+    # t regardless of what either rendered before. This is the continuity
+    # property at the ugen level.
+    a = LFO("sine", hz=0.25)
+    b = LFO("sine", hz=0.25)
+    for f, t in enumerate([0.0, 0.5, 1.0]):
+        a.render(ctx(f, time=t))
+    va = float(a.render(ctx(3, time=1e6 + 0.3)))
+    vb = float(b.render(ctx(0, time=1e6 + 0.3)))
+    assert va == vb

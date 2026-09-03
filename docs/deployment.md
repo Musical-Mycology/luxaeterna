@@ -131,6 +131,15 @@ Row 2 is not today's shape and there is no current plan to split the Terrarium
 renderer out. It is in the matrix so the cost of doing so is on the record: it
 converts row 1's zero-hop path into a 2-hop one.
 
+One timing fact matters in every deployment row above: `render_into` passes
+the injected clock's reading straight through as `t`. On a Terrarium that
+clock is `o2lite.time_get`, injected by Control into every fixture session,
+so a `rainbow` declared on `primary` across two fixtures scrolls as one
+gradient even though each fixture has its own session. Instruments that
+need a local origin (envelopes, segment levels, the status signatures)
+integrate `dt` instead; `t` starts wherever the clock is, which is usually
+not zero, and must never be assumed to.
+
 ## Development environment caveat
 
 **Art-Net is UDP to WLED controllers on the LAN.** A NAT'd VM or a WSL2 host
