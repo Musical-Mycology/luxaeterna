@@ -83,19 +83,29 @@ function draw(f){
   }
 }
 /* --- operator input: gestures sent back over the same socket --------- */
-const TILT_MIN_MS=50,DRAG_PX=5;
-let dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0;
+/* Click taps, horizontal drag tilts. A press held HOLD_MIN_MS without
+   dragging is a hold (the Rev 1 board's hold window); the arrow keys swing
+   left/right at SWING_G, past the board's 1.5 g swing threshold. The page
+   does not know the role: the device process decides what each goes out as. */
+const TILT_MIN_MS=50,DRAG_PX=5,HOLD_MIN_MS=400,SWING_G=2;
+let dragging=false,dragMoved=false,lastTiltMs=0,dragX0=0,downMs=0;
+function describe(g){
+  if(g.type==='tap')return ' x'+g.count;
+  if(g.type==='hold')return ' '+g.held_seconds.toFixed(2)+'s';
+  if(g.type==='swing')return ' '+(g.signed_peak_g>0?'+':'')+g.signed_peak_g+'g';
+  return ' '+g.gamma.toFixed(0)+'°';
+}
 function sendGesture(g){
   if(ws.readyState!==1)return;
   ws.send(JSON.stringify(g));
-  st.textContent='sent '+g.type+(g.type==='tap'?' x'+g.count:' '+g.gamma.toFixed(0)+'°');
+  st.textContent='sent '+g.type+describe(g);
 }
 function dragGamma(x){
   const w=cv.clientWidth||cv.width;
   const g=(x/Math.max(1,w))*180-90;
   return Math.max(-90,Math.min(90,g));
 }
-cv.onpointerdown=(e)=>{dragging=true;dragMoved=false;dragX0=e.offsetX;lastTiltMs=0;};
+cv.onpointerdown=(e)=>{dragging=true;dragMoved=false;dragX0=e.offsetX;lastTiltMs=0;downMs=Date.now();};
 cv.onpointermove=(e)=>{
   if(!dragging)return;
   if(Math.abs(e.offsetX-dragX0)>DRAG_PX)dragMoved=true;
@@ -109,7 +119,9 @@ cv.onpointerup=(e)=>{
   if(!dragging)return;
   const wasDrag=dragMoved;
   dragging=false;
+  const heldMs=Date.now()-downMs;
   if(wasDrag)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
+  else if(heldMs>=HOLD_MIN_MS)sendGesture({type:'hold',held_seconds:heldMs/1000});
   else sendGesture({type:'tap',count:1});
 };
 cv.onpointerleave=(e)=>{
@@ -117,6 +129,11 @@ cv.onpointerleave=(e)=>{
   dragging=false;
   if(dragMoved)sendGesture({type:'tilt',gamma:dragGamma(e.offsetX)});
 };
+window.addEventListener('keydown',(e)=>{
+  if(e.repeat)return;
+  if(e.key==='ArrowLeft')sendGesture({type:'swing',signed_peak_g:-SWING_G});
+  else if(e.key==='ArrowRight')sendGesture({type:'swing',signed_peak_g:SWING_G});
+});
 </script></body></html>"""
 
 
