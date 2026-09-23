@@ -1,64 +1,38 @@
 # Deployment matrix — where the Lux Aeterna renderer runs, and what feeds it
 
-Lux Aeterna is a library, not a service. It runs wherever its LEDs are, and the
-two Musical Mycology sites put it in very different places. The input path — and
-therefore the message cost of a note or CC — is different at each. This document
-states which is which, because nothing else in the repo does.
+Lux Aeterna is a library, not a service. It runs in one place: the
+Control+GameServer process on the Terrarium. Everything that shows light,
+whether a Tuneshroom, the Console strip or (later) the venue's WLED
+controllers, is a **pixel sink** that gets frames Lux Aeterna has already
+rendered. This document records that decision, the other shapes it ruled out,
+and what each shape costs in messages.
 
-## Implementation status, verified 2026-08-20
+## Implementation status, verified 2026-09-23
 
-> **The matrix below describes the target architecture. Row 1 is still the only
-> row that exists**, but the reason rows 2 and 3 do not is no longer the reason
-> the previous revision of this note gave. Traced against `mm-terrarium@c94cdc5`
-> and `luxaeterna@97281ee`.
+> Traced against `mm-terrarium@e709c7e` and `luxaeterna@a4088f1`.
 >
-> **There is an Arco server process now.** `control/arco_process.py` spawns and
-> owns it and `control/boot.py` starts it as the first step of the load
-> sequence; shutdown is SIGTERM, because Arco has no message-based quit. There
-> is still no `arcoserver/` in mm-terrarium: the binary is Arco's own
-> `apps/pytest/server`, spawned on a pty.
+> **Row 1 is the only row that exists, and it is the design.** Row 3 is
+> retired, not unbuilt. `MM_HARDWARE_DESIGN.md` §4.4 (revised 2026-08-05) says
+> *"Lux Aeterna renders on the Terrarium, not on the device"*. mm-terrarium
+> built that: `devicelink/agent.py` owns one `LightSession` per joined device
+> and one per Room fixture, renders them on the 44 Hz engine tick, and hands
+> each changed frame to that output's `FixtureSink`s
+> (`control/fixture_sink.py`). The device wire carries **rendered bytes, not
+> MIDI**: `DeviceLinkSink` sends `/<dev>/leds` (36 bytes, 12 LEDs × 3) stamped
+> with the cue's O2 time `when`, and the device holds the frame until then.
 >
-> **pyarco and o2litepy are imported, always function-scoped.**
-> `control/arco_process.py:37`, `harness/arco_synth.py:91-93`,
-> `harness/o2_shroom.py:236`, `harness/run_stack.py:478`,
-> `harness/terrarium_boot.py:480`. Every one is marked lazy by design.
-> `control/audio.py` documents the module-level ban that keeps the offline
-> suite green. A previous revision of this note claimed zero such imports; that
-> came from a grep anchored at `^` which could not see an indented one.
+> **o2lite is the only device wire** as of mm-terrarium's 2026-09-08 cutover.
+> The earlier bare-websocket JSON path is deleted.
 >
-> **The device wire is two paths now, chosen per run.** The default is still
-> plain JSON over a bare websocket (`devicelink/server.py:14,33`), with an
-> envelope that mirrors o2ws field-for-field without being o2ws. Opt in with
-> `--transport o2lite` and `devicelink/o2_transport.py` offers Control's `game`
-> service on the real Arco hub instead. That path has been run against a live
-> Arco and observed working (2026-08-13).
+> **`O2Bridge.attach()` still has no production caller.** Nothing outside
+> mm-terrarium's `tests/` references `O2Bridge`. It is kept for row 2, a
+> shape nobody plans to build.
 >
-> **That did not advance rows 2 or 3, and the reason is the interesting part.**
-> What crosses the device wire is *rendered frames*, not MIDI:
-> `devicelink/agent.py:379` ships `universe.get_frame()[:36]` to a Tuneshroom,
-> and `:305` ships the Room its `channel_count` slice. luxaeterna renders inside
-> Control for every path that exists. Rows 2 and 3 both describe luxaeterna
-> running somewhere else and being fed `/light/midi`, and the architecture went
-> the other way: render centrally, ship pixels. A real device transport is
-> therefore not the missing piece for those rows.
->
-> **`O2Bridge.attach()` still has no production caller.** `git grep "attach("`
-> over all of mm-terrarium returns nothing; `LightSession.attach()`
-> (`synth/session.py:44`) is reached only from `tests/synth/`. `O2Bridge.on_midi()`
-> *is* live, as an in-process queue shim. The class is instantiated; its o2lite
-> half has never executed. Unchanged since this note was first written, and the
-> single clearest signal that rows 2 and 3 are unbuilt.
->
-> **A `DMXBackend` is instantiated now, just not on the Tuneshroom path.**
-> `WebSimBackend` at `harness/led_smoke.py:65`, `harness/o2_shroom.py:161` and
-> `harness/room_simulator.py:91`; `ArtNet` at `harness/array_smoke.py:46`. A
-> previous revision claimed the only `ArtNet(` anywhere was the usage example in
-> `luxaeterna/__init__.py:12`; that stopped being true when the venue-array
-> tooling landed.
->
-> **Still true: nothing in Musical Mycology has driven a physical light.**
-> `harness/array_smoke.py` is the only Art-Net caller and it is standalone,
-> never plugged into `boot()`. The venue array remains simulated.
+> **Nothing in Musical Mycology has driven a physical light over Art-Net yet.**
+> `harness/array_smoke.py` is the only `ArtNet` caller, and it is standalone.
+> `BootConfig.array_backend` reserves a slot for a WLED host, but no
+> `FixtureSink` sends to an Art-Net backend. That sink is the planned bridge
+> to the venue array (see *Embedded devices* below).
 
 ## The routing rule this follows
 
@@ -83,21 +57,21 @@ Which yields the rule this document exists to make explicit:
 
 ## The matrix
 
-| # | Site | What Lux Aeterna drives | Where the renderer runs | Control-plane input (note/CC, manifest swap, status) | Hops |
-|---|---|---|---|---|---|
-| 1 | **Terrarium (venue)** — *today's shape* | Venue LED array: SK6812 bars + fiber engines, via Art-Net → WLED (`MM_HARDWARE_DESIGN.md` §7.1) | **Inside the Control+GameServer process** — mm-terrarium's `harness/` constructs a `LightSession` in-process | **Direct Python calls**: `session.feed_midi(...)`, `.swap(...)`, `.clear()`. `O2Bridge.attach()` is **not involved at all.** | **0** |
-| 2 | **Terrarium (venue)** — *if split out* | same | Its own process on the same Pi 5 | `O2Bridge.attach()` on `/light/midi`; Control → Arco → luxaeterna | **2** |
-| 3 | **Tuneshroom (device)** | 12 local LEDs (8-ring + 4-stem, GRB) at 44 Hz | On the device, alongside its o2lite client | `O2Bridge.attach()` on `/light/midi`; Control → Arco → device | **2** |
+| # | Site | What Lux Aeterna drives | Where the renderer runs | Control-plane input (note/CC, manifest swap, status) | Hops | Status |
+|---|---|---|---|---|---|---|
+| 1 | **Terrarium** | Every light in the room, through `FixtureSink`s: Tuneshroom LEDs (`/<dev>/leds` over o2lite), the Console strip, and later the venue array (Art-Net → WLED, `MM_HARDWARE_DESIGN.md` §7.1) | **Inside the Control+GameServer process** | **Direct Python calls**: `session.feed_midi(...)`, `.swap(...)`, `.clear()`. `O2Bridge` is **not involved.** | **0** in, **2** out to a device | **Built. This is the design.** |
+| 2 | **Terrarium**, if split out | same | Its own process on the same Pi 5 | `O2Bridge.attach()` on `/light/midi`; Control → Arco → luxaeterna | **2** in | Not planned; recorded for its cost |
+| 3 | ~~**Tuneshroom**, on-device~~ | ~~12 local LEDs~~ | ~~On the device~~ | ~~`O2Bridge.attach()` on `/light/midi`~~ | ~~2~~ | **Retired 2026-08-05** by `MM_HARDWARE_DESIGN.md` §4.4: the device is a pixel sink |
 
 ### Row 1 — the Terrarium, in-process
 
-This is what exists. mm-terrarium's `harness/device_bridge.py` turns a granted
-`JoinResult.config` blob into a `LightSession` and calls `build_session(...)`
-directly; `harness/led_smoke.py` injects MIDI with `LightSession.feed_midi(...)`.
-No o2lite client is constructed and no handler is registered. The session's
-lifecycle methods (`swap`, `clear`, `error`, `identify`, …) are already plain
-method calls that enqueue events — they are the in-process control surface, and
-they are not O2-specific.
+This is what exists. mm-terrarium's `devicelink/agent.py` builds a session with
+`build_session(...)` for each joined device (via `harness/device_bridge.py`)
+and for each Room fixture. It drives those sessions with `feed_midi(...)` and
+`swap(...)` from Bit cues, the lobby, generators and breath. No o2lite handler
+is registered for light. The session's lifecycle methods (`swap`, `clear`,
+`error`, `identify`, …) are plain method calls that enqueue events. They are
+the in-process control surface, and they are not O2-specific.
 
 `feed_midi()` is a first-class production entry point on this path, not merely a
 test seam. It packs and enqueues exactly as a real packet would, so the event is
@@ -110,26 +84,57 @@ Arco to deliver a message that a method call delivers in zero — and Arco on th
 venue box is the same process doing all room synthesis while feeding this
 renderer's 44 Hz loop.
 
+The *output* side does cross O2. A rendered frame for a Tuneshroom goes
+Control → Arco → device (2 hops), stamped with a presentation time one
+`cue_horizon` ahead so it arrives before it is due.
+
 Note that the venue array's *spectral* visualisation (§7.1: "spectral →
-Art-Net → WLED via Lux Aeterna") is **not built in this repo yet**. When it is,
-its analysis data originates in Arco and reaches Control over `/actl` (1 hop),
-then crosses into the renderer in-process. This document's matrix covers the
-control-plane input that exists today.
+Art-Net → WLED via Lux Aeterna") is **not built yet**. When it is, its analysis
+data originates in Arco and reaches Control over `/actl` (1 hop), then crosses
+into the renderer in-process.
 
-### Rows 2 and 3 — the cross-process and on-device cases
+### Row 2 — split out, and why row 3 was retired
 
-`O2Bridge` exists for these. The renderer is in a different process from
-Control, so `/light/midi` is a real wire, `attach()` registers the handler once
-on the caller-supplied o2lite client, and each note/CC costs 2 hops: Control →
-Arco → renderer.
+`O2Bridge` exists for row 2. The renderer would be in a different process from
+Control, so `/light/midi` would be a real wire, `attach()` registers the
+handler once on the caller-supplied o2lite client, and each note/CC costs 2
+hops: Control → Arco → renderer. The bridge only *enqueues* on the o2lite
+receive thread, and decode and dispatch happen at drain time on the render
+thread, so a 44 Hz loop is never blocked by the network. There is no plan to
+split the Terrarium renderer out. Row 2 is here so the cost of doing it is on
+the record.
 
-Both rows land against a 44 Hz render loop, which is why the bridge only
-*enqueues* on the o2lite receive thread — decode and dispatch happen later, at
-drain time on the render thread. That design is unchanged by anything here.
+Row 3 put a renderer on each Tuneshroom. The 2026-08-05 hardware revision
+removed it along with local Arco: a Bit runs on the Terrarium, and the
+Tuneshroom is an instrument the Terrarium plays *to*. Rendering centrally has
+three effects. Every light shares one clock and one manifest, the device
+firmware stays simple, and nothing on a device needs Python.
 
-Row 2 is not today's shape and there is no current plan to split the Terrarium
-renderer out. It is in the matrix so the cost of doing so is on the record: it
-converts row 1's zero-hop path into a 2-hop one.
+## Embedded devices: a pixel sink, not a port
+
+Lux Aeterna is Python and depends on numpy. It will not run on
+a microcontroller, and **it never has to**. Every embedded output is reached by
+shipping it rendered bytes over a protocol the device already speaks. The seam
+is mm-terrarium's `FixtureSink.send_frame(frame, when)`. A new kind of hardware
+is a new sink, and nothing upstream of that seam changes.
+
+| Output | Hardware | What runs on it | Bridge | State |
+|---|---|---|---|---|
+| Tuneshroom (2H) | Radxa Zero 3W, 12× SK6812 RGBW | o2lite client (C). Shows a frame at `when` | `DeviceLinkSink` → `/<dev>/leds` over o2lite | Wire built. mm-tuneshroom's app implements the timed `/ie<N>/leds` queue. 2H firmware not yet written |
+| Tuneshroom (2S) / Testshroom | browser or `harness/o2_shroom.py` | o2lite or o2ws client | same | Built |
+| Venue array, Booster | WLED ESP32 (GLEDOPTO class) | Stock WLED firmware, Art-Net input | Lux Aeterna `ArtNet` backend → UDP | Backend built (`harness/array_smoke.py`). **No `FixtureSink` yet** |
+| Any other MCU strip | ESP32 or similar | o2lite C client (it supports ESP32 Arduino) or WLED | either of the above | Not needed yet |
+
+What an embedded sink has to do is small: accept a byte frame (3 bytes per
+LED, in the fixture's `color_order`), hold it until its `when` on the shared
+O2 clock, then latch it to the strip. It needs no effects engine, no manifest
+and no MIDI.
+
+**Open: RGBW.** The Tuneshroom's SK6812 parts and the venue array's are
+RGBW, but the device wire is 3 channels per LED today (`_DEVICE_CHANNELS =
+36` in mm-terrarium). `luxaeterna` can render 4-channel surfaces. mm-terrarium's
+`control/room_profile.py` records widening the wire to four channels as a
+separate, undecided question.
 
 One timing fact matters in every deployment row above: `render_into` passes
 the injected clock's reading straight through as `t`. On a Terrarium that
