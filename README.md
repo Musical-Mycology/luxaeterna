@@ -5,12 +5,14 @@ Musical Mycology toolset.
 
 ## Where it runs
 
-Lux Aeterna is a library, and its input path depends on where you put it. On the
-Terrarium it runs **inside** the Control+GameServer process and is driven by
-direct Python calls — `O2Bridge` is not involved. On a Tuneshroom (and in any
-cross-process split) it runs in its own process and `O2Bridge` carries note/CC
-over o2lite at a cost of 2 hops. See **[docs/deployment.md](docs/deployment.md)**
-for the full matrix, the hop counts behind it, and the dev-environment caveat
+Lux Aeterna is a library, and it runs in one place: **inside** the Terrarium's
+Control+GameServer process, driven by direct Python calls (`O2Bridge` is not
+involved). It renders every light in the room there and ships the finished
+frames to pixel sinks. A Tuneshroom gets raw bytes on `/<dev>/leds` over
+o2lite, and the venue's WLED ESP32 controllers will get Art-Net. No device runs
+Lux Aeterna, so embedded hardware needs a sink, not a port. See
+**[docs/deployment.md](docs/deployment.md)** for the matrix, the hop counts
+behind it, the embedded-devices section, and the dev-environment caveat
 (Art-Net is UDP — a NAT'd VM or WSL2 host cannot reach WLED controllers; use
 `WebSimBackend`).
 
