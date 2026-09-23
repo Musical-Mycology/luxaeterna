@@ -9,7 +9,7 @@ and what each shape costs in messages.
 
 ## Implementation status, verified 2026-09-23
 
-> Traced against `mm-terrarium@e709c7e` and `luxaeterna@a4088f1`.
+> Traced against `mm-terrarium@51373a4` and `luxaeterna@5115ff4`.
 >
 > **Row 1 is the only row that exists, and it is the design.** Row 3 is
 > retired, not unbuilt. `MM_HARDWARE_DESIGN.md` §4.4 (revised 2026-08-05) says
@@ -28,11 +28,24 @@ and what each shape costs in messages.
 > mm-terrarium's `tests/` references `O2Bridge`. It is kept for row 2, a
 > shape nobody plans to build.
 >
-> **Nothing in Musical Mycology has driven a physical light over Art-Net yet.**
-> `harness/array_smoke.py` is the only `ArtNet` caller, and it is standalone.
-> `BootConfig.array_backend` reserves a slot for a WLED host, but no
-> `FixtureSink` sends to an Art-Net backend. That sink is the planned bridge
-> to the venue array (see *Embedded devices* below).
+> **The Art-Net `FixtureSink` exists; no physical light has been driven by
+> it yet.** mm-terrarium PR #140 added `ArtNetFixtureSink`
+> (`devicelink/artnet_sink.py`), one per `[[artnet]]` entry in
+> `terrarium.toml`:
+>
+> - It holds each frame in Control until its `when`, because WLED has no clock.
+> - It resends the last frame as a keepalive.
+> - It applies a per-output `PowerLimiter`.
+> - It sends 4 ch/px through `PixelSpan`/`UniverseSet`, which is 128 px per
+>   universe.
+>
+> A no-hardware run has been verified: DEMO against a live Arco, sent to
+> `127.0.0.1`, received by mm-terrarium's `harness/artnet_listen.py`. That run
+> measured ~33 fps with 0 sequence gaps. It is a dev-box figure, below the
+> 44 Hz tick, and not yet explained. Hardware bring-up (mm-terrarium spec
+> `2026-09-23-artnet-fixture-sink-design.md` §9) is pending.
+> `BootConfig.array_backend` no longer names a WLED host: it is `None` or
+> `"simulator"`, and a real array is wired only through `[[artnet]]`.
 
 ## The routing rule this follows
 
@@ -59,7 +72,7 @@ Which yields the rule this document exists to make explicit:
 
 | # | Site | What Lux Aeterna drives | Where the renderer runs | Control-plane input (note/CC, manifest swap, status) | Hops | Status |
 |---|---|---|---|---|---|---|
-| 1 | **Terrarium** | Every light in the room, through `FixtureSink`s: Tuneshroom LEDs (`/<dev>/leds` over o2lite), the Console strip, and later the venue array (Art-Net → WLED, `MM_HARDWARE_DESIGN.md` §7.1) | **Inside the Control+GameServer process** | **Direct Python calls**: `session.feed_midi(...)`, `.swap(...)`, `.clear()`. `O2Bridge` is **not involved.** | **0** in, **2** out to a device | **Built. This is the design.** |
+| 1 | **Terrarium** | Every light in the room, through `FixtureSink`s: Tuneshroom LEDs (`/<dev>/leds` over o2lite), the Console strip, and the venue array (Art-Net → WLED through `ArtNetFixtureSink`, `MM_HARDWARE_DESIGN.md` §7.1) | **Inside the Control+GameServer process** | **Direct Python calls**: `session.feed_midi(...)`, `.swap(...)`, `.clear()`. `O2Bridge` is **not involved.** | **0** in, **2** out to a device | **Built. This is the design.** |
 | 2 | **Terrarium**, if split out | same | Its own process on the same Pi 5 | `O2Bridge.attach()` on `/light/midi`; Control → Arco → luxaeterna | **2** in | Not planned; recorded for its cost |
 | 3 | ~~**Tuneshroom**, on-device~~ | ~~12 local LEDs~~ | ~~On the device~~ | ~~`O2Bridge.attach()` on `/light/midi`~~ | ~~2~~ | **Retired 2026-08-05** by `MM_HARDWARE_DESIGN.md` §4.4: the device is a pixel sink |
 
@@ -122,19 +135,29 @@ is a new sink, and nothing upstream of that seam changes.
 |---|---|---|---|---|
 | Tuneshroom (2H) | Radxa Zero 3W, 12× SK6812 RGBW | o2lite client (C). Shows a frame at `when` | `DeviceLinkSink` → `/<dev>/leds` over o2lite | Wire built. mm-tuneshroom's app implements the timed `/ie<N>/leds` queue. 2H firmware not yet written |
 | Tuneshroom (2S) / Testshroom | browser or `harness/o2_shroom.py` | o2lite or o2ws client | same | Built |
-| Venue array, Booster | WLED ESP32 (GLEDOPTO class) | Stock WLED firmware, Art-Net input | Lux Aeterna `ArtNet` backend → UDP | Backend built (`harness/array_smoke.py`). **No `FixtureSink` yet** |
+| Venue array, Booster | WLED ESP32 (GLEDOPTO class) | Stock WLED firmware, Art-Net input | mm-terrarium `ArtNetFixtureSink` → Lux Aeterna `ArtNet` backend → UDP | Sink built (mm-terrarium PR #140). No-hardware run verified. **Hardware bring-up pending** |
 | Any other MCU strip | ESP32 or similar | o2lite C client (it supports ESP32 Arduino) or WLED | either of the above | Not needed yet |
 
-What an embedded sink has to do is small: accept a byte frame (3 bytes per
-LED, in the fixture's `color_order`), hold it until its `when` on the shared
-O2 clock, then latch it to the strip. It needs no effects engine, no manifest
+What an embedded sink has to do is small. It accepts a byte frame with
+`len(color_order)` bytes per LED (3 for RGB orders, 4 for RGBW), in the
+fixture's `color_order`. It holds the frame until its `when` on the shared
+O2 clock, then latches it to the strip. A device with no clock, such as
+WLED, gets its frame held in Control instead: `ArtNetFixtureSink` sends it
+when it is due. It needs no effects engine, no manifest
 and no MIDI.
 
-**Open: RGBW.** The Tuneshroom's SK6812 parts and the venue array's are
-RGBW, but the device wire is 3 channels per LED today (`_DEVICE_CHANNELS =
-36` in mm-terrarium). `luxaeterna` can render 4-channel surfaces. mm-terrarium's
-`control/room_profile.py` records widening the wire to four channels as a
-separate, undecided question.
+**RGBW: settled for Room fixtures, still open for the Tuneshroom.**
+
+- Room fixtures render RGBW natively as of mm-terrarium PR #140:
+  - A fixture's `color_order` may be four letters.
+  - Channels per pixel are `len(color_order)`.
+  - DEMO's array is `RGBW`.
+  - `WebSimBackend` draws W additively as of luxaeterna PR #21.
+- The Tuneshroom *player* wire is still 3 channels per LED
+  (`_DEVICE_CHANNELS = 36` in mm-terrarium), so its white die stays
+  unreachable. Widening that wire to four channels is still a separate,
+  undecided question.
+- Existing instruments render W = 0 until one declares 4-component colors.
 
 One timing fact matters in every deployment row above: `render_into` passes
 the injected clock's reading straight through as `t`. On a Terrarium that
