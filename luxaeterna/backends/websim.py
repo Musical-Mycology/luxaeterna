@@ -12,6 +12,7 @@ import threading
 
 from .base import DMXBackend
 from ..synth.capability import SurfaceCapability, shroom_capability
+from ..synth.engine import channels_for
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,10 @@ function pos(i){
   return [40+i*24,380];
 }
 function rgb(f,i){
-  const o=cap.color_order,b=[f[i*3],f[i*3+1],f[i*3+2]],m={};
-  for(let j=0;j<3;j++)m[o[j]]=b[j];
-  return 'rgb('+(m.R||0)+','+(m.G||0)+','+(m.B||0)+')';
+  const o=cap.color_order,w=o.length,m={};
+  for(let j=0;j<w;j++)m[o[j]]=f[i*w+j];
+  const W=m.W||0,c=(v)=>Math.min(255,(v||0)+W);
+  return 'rgb('+c(m.R)+','+c(m.G)+','+c(m.B)+')';
 }
 function draw(f){
   cx.clearRect(0,0,cv.width,cv.height);
@@ -192,7 +194,7 @@ class WebSimBackend(DMXBackend):
                  serve: bool = True, label: str | None = None,
                  on_input=None) -> None:
         self._cap = capability or shroom_capability()
-        self._n = self._cap.pixel_count * 3          # bytes we care about
+        self._n = self._cap.pixel_count * channels_for(self._cap.color_order)  # bytes we care about
         self._host = host
         self._port = port
         self._serve = serve

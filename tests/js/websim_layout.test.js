@@ -204,6 +204,19 @@ test('a resize relays out and repaints the last frame', () => {
     'a resize must repaint every pixel of the held frame');
 });
 
+test('an RGBW surface paints white additively onto r, g and b', () => {
+  const cap = {
+    type: 'capability', surface_id: 'rgbw', pixel_count: 2, color_order: 'RGBW',
+    zones: [{ name: 'primary', start: 0, count: 2 }],
+  };
+  // px0: R=10 G=20 B=30 W=5 ; px1: W=250 with R=10 (clips at 255)
+  const { canvas } = run(cap, new Uint8Array([10, 20, 30, 5, 10, 0, 0, 250]),
+                         { w: 800, h: 600 });
+  const styles = canvas.ops.filter((o) => o[0] === 'fillStyle').map((o) => o[1]);
+  assert.ok(styles.includes('rgb(15,25,35)'), `got ${styles}`);
+  assert.ok(styles.includes('rgb(255,250,250)'), `got ${styles}`);
+});
+
 // --- runner --------------------------------------------------------------
 
 let failed = 0;

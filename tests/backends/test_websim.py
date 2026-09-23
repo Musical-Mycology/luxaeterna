@@ -46,3 +46,15 @@ def test_label_defaults_to_none_and_page_html_is_unchanged():
 def test_label_is_stored_verbatim():
     b = WebSimBackend(capability=shroom_capability(), serve=False, label="sim-room")
     assert b.label == "sim-room"
+
+
+def test_record_only_backend_slices_rgbw_by_four_channels():
+    from luxaeterna.synth.capability import SurfaceCapability, Zone
+    cap = SurfaceCapability(surface_id="rgbw", pixel_count=3,
+                            color_order="RGBW", zones=[Zone("primary", 0, 3)])
+    b = WebSimBackend(capability=cap, serve=False)
+    b.open()
+    frame = bytearray(range(12)) + bytearray(512 - 12)
+    b.send(frame)
+    assert b.frames[0] == bytes(range(12))      # 3 px * 4 ch, not 3 px * 3
+    b.close()
