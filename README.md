@@ -9,7 +9,7 @@ Lux Aeterna is a library, and it runs in one place: **inside** the Terrarium's
 Control+GameServer process, driven by direct Python calls (`O2Bridge` is not
 involved). It renders every light in the room there and ships the finished
 frames to pixel sinks. A Tuneshroom gets raw bytes on `/<dev>/leds` over
-o2lite, and the venue's WLED ESP32 controllers will get Art-Net. No device runs
+o2lite, and the venue's WLED ESP32 controllers get Art-Net through mm-terrarium's `ArtNetFixtureSink` (hardware bring-up pending). No device runs
 Lux Aeterna, so embedded hardware needs a sink, not a port. See
 **[docs/deployment.md](docs/deployment.md)** for the matrix, the hop counts
 behind it, the embedded-devices section, and the dev-environment caveat
