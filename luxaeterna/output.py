@@ -10,6 +10,7 @@ from typing import Callable
 from .backends.base import DMXBackend
 from .constants import DMX_REFRESH_HZ
 from .logutil import ThrottledLog
+from .pacing import TickPacer
 from .universe import Universe
 
 log = logging.getLogger(__name__)
@@ -21,7 +22,9 @@ class OutputLoop:
     Runs on a daemon thread so it dies automatically if the main
     program exits.  The loop targets *frame_rate* Hz (default 44,
     the DMX512 standard) and skips sending when the universe hasn't
-    changed (dirty-flag optimisation).
+    changed (dirty-flag optimisation).  It paces itself to deadlines
+    (:class:`~luxaeterna.pacing.TickPacer`), so sleep overshoot is
+    repaid and the mean rate holds at *frame_rate*.
 
     Parameters
     ----------
@@ -42,6 +45,9 @@ class OutputLoop:
         check. Lets a driver (e.g. a rendering engine) paint the universe
         every frame; the existing dirty/always_send logic still decides
         whether that frame is actually sent.
+    clock, sleep : callable, optional
+        Time source and sleep used for pacing and FPS tracking; seams for
+        offline tests.
     """
 
     def __init__(
@@ -52,6 +58,9 @@ class OutputLoop:
         on_error: Callable[[Exception], None] | None = None,
         always_send: bool = False,
         on_frame: Callable[[Universe], None] | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.universe = universe
         self.backend = backend
@@ -59,6 +68,8 @@ class OutputLoop:
         self.on_error = on_error
         self.always_send = always_send
         self.on_frame = on_frame
+        self._clock = clock
+        self._sleep = sleep
 
         self._throttle = ThrottledLog(log)
         self._running = False
@@ -136,26 +147,23 @@ class OutputLoop:
         return False
 
     def _loop(self) -> None:
-        interval = self.frame_interval
+        # Fresh per run, so a restart never inherits a stale deadline.
+        pacer = TickPacer(self.frame_interval, clock=self._clock,
+                          sleep=self._sleep)
         frames = 0
-        fps_clock = time.monotonic()
+        fps_clock = self._clock()
 
         while self._running:
-            loop_start = time.monotonic()
-
             if self._loop_once():
                 frames += 1
 
             # FPS tracking (updated once per second)
-            now = time.monotonic()
+            now = self._clock()
             elapsed_fps = now - fps_clock
             if elapsed_fps >= 1.0:
                 self._fps = frames / elapsed_fps
                 frames = 0
                 fps_clock = now
 
-            # Sleep the remainder of the frame interval
-            elapsed = now - loop_start
-            sleep_time = interval - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            # Sleep to the next deadline (repays work time and sleep overshoot)
+            pacer.wait()

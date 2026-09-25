@@ -219,3 +219,64 @@ def test_always_send_true_sends_clean_universes_anyway():
     loop._loop_once()
     backend.sent.clear()
     assert loop._loop_once() == 7
+
+
+# --- pacing ---
+#
+# The loop sleeps to deadlines (TickPacer), so the platform's sleep overshoot
+# (~4 ms on macOS, which held the old remaining-interval loop at ~37 Hz) is
+# repaid and the mean rate holds at 44 Hz. Driven offline: _loop() runs on
+# this thread against a fake clock, and the fake sleep stops it.
+
+PERIOD = 1.0 / 44.0
+OVERSLEEP = 0.004
+
+
+class PacedRun:
+    """Fake clock + oversleeping sleep that stops *loop* after *seconds*."""
+
+    def __init__(self, seconds: float) -> None:
+        self.now = 1000.0
+        self.stop_at = self.now + seconds
+        self.loop = None
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        assert seconds > 0
+        self.now += seconds + OVERSLEEP
+        if self.now >= self.stop_at:
+            self.loop._running = False
+
+    def run(self, loop) -> None:
+        self.loop = loop
+        loop._running = True
+        loop._loop()
+
+
+def test_fps_holds_44_despite_sleep_overshoot():
+    run = PacedRun(seconds=3.5)
+    loop = MultiUniverseOutputLoop(UniverseSet(PixelSpan(TERRARIUM)),
+                                   RecordingBackend(),
+                                   clock=run.clock, sleep=run.sleep)
+    run.run(loop)
+    assert loop.fps == pytest.approx(44.0, rel=0.01)
+
+
+def test_a_stall_resyncs_without_bursting():
+    run = PacedRun(seconds=2.0)
+    ticks: list[float] = []
+
+    def paint(_):
+        ticks.append(run.now)
+        if len(ticks) == 20:
+            run.now += 0.100             # a 100 ms stall mid-tick
+
+    loop = MultiUniverseOutputLoop(UniverseSet(PixelSpan(TERRARIUM)),
+                                   RecordingBackend(), on_frame=paint,
+                                   clock=run.clock, sleep=run.sleep)
+    run.run(loop)
+    intervals = [b - a for a, b in zip(ticks, ticks[1:])]
+    assert len(ticks) > 40
+    assert min(intervals) >= PERIOD - 0.001    # no back-to-back catch-up ticks
