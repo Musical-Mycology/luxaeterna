@@ -25,9 +25,9 @@
 - Create: `luxaeterna/pacing.py`
 - Test: `tests/test_pacing.py`
 
-- [ ] Write `tests/test_pacing.py` (fake clock; sleep oversleeps 4 ms): mean rate over N waits, work subtracted, stall resync without burst, no non-positive sleeps, first wait sleeps one period, bad period raises. Run: fails on import.
-- [ ] Implement `TickPacer(period, *, clock=time.monotonic, sleep=time.sleep)` with `wait()` per spec §2.1. Run: passes.
-- [ ] Commit `feat(pacing): TickPacer, deadline pacing that repays sleep slack`.
+- [x] Write `tests/test_pacing.py` (fake clock; sleep oversleeps 4 ms): mean rate over N waits, work subtracted, stall resync without burst, no non-positive sleeps, first wait sleeps one period, bad period raises. Run: fails on import.
+- [x] Implement `TickPacer(period, *, clock=time.monotonic, sleep=time.sleep)` with `wait()` per spec §2.1. Run: passes.
+- [x] Commit `feat(pacing): TickPacer, deadline pacing that repays sleep slack`.
 
 ### Task 2: pace both output loops
 
@@ -36,6 +36,6 @@
 - Modify: `luxaeterna/output.py` (`OutputLoop.__init__`, `_loop`)
 - Test: `tests/test_universeset.py`, `tests/test_output_hook.py`
 
-- [ ] Add loop-level tests: with the 4 ms-oversleep fake, `_loop()` run synchronously for ~3 s fake time gives `fps` within 1% of 44; a 100 ms stall in `on_frame` is followed by no tick interval shorter than one period less 1 ms. Run: fail (`clock` kwarg unknown).
-- [ ] Add keyword-only `clock`/`sleep` to both constructors; in `_loop` build a fresh `TickPacer(self.frame_interval, clock=self._clock, sleep=self._sleep)`, use `self._clock` for the fps timer, replace the remaining-sleep block with `pacer.wait()`. Run: pass.
-- [ ] Full suite green. Commit `fix(output): pace the 44 Hz output loops to deadlines, not the remaining interval`.
+- [x] Add loop-level tests: with the 4 ms-oversleep fake, `_loop()` run synchronously for ~3 s fake time gives `fps` within 1% of 44; a 100 ms stall in `on_frame` is followed by no tick interval shorter than one period less 1 ms. Run: fail (`clock` kwarg unknown).
+- [x] Add keyword-only `clock`/`sleep` to both constructors; in `_loop` build a fresh `TickPacer(self.frame_interval, clock=self._clock, sleep=self._sleep)`, use `self._clock` for the fps timer, replace the remaining-sleep block with `pacer.wait()`. Run: pass.
+- [x] Full suite green. Commit `fix(output): pace the 44 Hz output loops to deadlines, not the remaining interval`.
