@@ -34,8 +34,8 @@ def test_feed_midi_note_lights_the_instrument_when_running():
     uni = Universe()
     _to_running(session, uni)
     session.render_into(uni)
-    assert max(uni.get_frame()[:36]) == 0          # dark before any note
+    assert max(uni.get_frame()[:48]) == 0          # dark before any note
 
     session.feed_midi(0x90, 60, 100)               # note-on
     session.render_into(uni)
-    assert max(uni.get_frame()[:36]) > 0           # lit after feed_midi
+    assert max(uni.get_frame()[:48]) > 0           # lit after feed_midi

@@ -146,17 +146,14 @@ WLED, gets its frame held in Control instead: `ArtNetFixtureSink` sends it
 when it is due. It needs no effects engine, no manifest
 and no MIDI.
 
-**RGBW: settled for Room fixtures, still open for the Tuneshroom.**
+**RGBW: settled for Room fixtures and the Tuneshroom.**
 
 - Room fixtures render RGBW natively as of mm-terrarium PR #140:
   - A fixture's `color_order` may be four letters.
   - Channels per pixel are `len(color_order)`.
   - DEMO's array is `RGBW`.
   - `WebSimBackend` draws W additively as of luxaeterna PR #21.
-- The Tuneshroom *player* wire is still 3 channels per LED
-  (`_DEVICE_CHANNELS = 36` in mm-terrarium), so its white die stays
-  unreachable. Widening that wire to four channels is still a separate,
-  undecided question.
+- The Tuneshroom wire is RGBW too since mm-terrarium contract v5 (2026-10-14).
 - Existing instruments render W = 0 until one declares 4-component colors.
 
 One timing fact matters in every deployment row above: `render_into` passes

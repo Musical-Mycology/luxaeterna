@@ -29,9 +29,9 @@ def test_client_receives_capability_then_frame():
             cap = json.loads(c.recv())               # capability arrives first
             assert cap["type"] == "capability"
             assert cap["pixel_count"] == 12
-            b.send(bytearray(range(36)) + bytearray(512 - 36))
+            b.send(bytearray(range(48)) + bytearray(512 - 48))
             frame = c.recv()                         # binary frame follows
-            assert bytes(frame) == bytes(range(36))
+            assert bytes(frame) == bytes(range(48))
     finally:
         b.close()
 
@@ -60,12 +60,12 @@ def test_client_connecting_after_a_send_receives_the_last_frame():
     b = WebSimBackend(capability=shroom_capability(), host="127.0.0.1", port=0)
     b.open()
     try:
-        b.send(bytearray(range(36)) + bytearray(512 - 36))   # nobody attached yet
+        b.send(bytearray(range(48)) + bytearray(512 - 48))   # nobody attached yet
         with connect(f"ws://127.0.0.1:{b.port}/ws") as c:
             cap = json.loads(c.recv())
             assert cap["type"] == "capability"           # capability still first
             frame = c.recv()                             # replayed, with no new send
-            assert bytes(frame) == bytes(range(36))
+            assert bytes(frame) == bytes(range(48))
     finally:
         b.close()
 
@@ -95,10 +95,10 @@ def test_a_later_client_receives_the_last_frame_while_the_first_is_attached():
     try:
         with connect(f"ws://127.0.0.1:{b.port}/ws") as first:
             json.loads(first.recv())
-            b.send(bytearray(range(36)) + bytearray(512 - 36))
-            assert bytes(first.recv()) == bytes(range(36))
+            b.send(bytearray(range(48)) + bytearray(512 - 48))
+            assert bytes(first.recv()) == bytes(range(48))
             with connect(f"ws://127.0.0.1:{b.port}/ws") as second:
                 json.loads(second.recv())
-                assert bytes(second.recv()) == bytes(range(36))
+                assert bytes(second.recv()) == bytes(range(48))
     finally:
         b.close()

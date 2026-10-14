@@ -178,3 +178,11 @@ def test_load_config_registers_nothing_when_any_surface_is_invalid():
              "zones": [{"name": "ring", "start": 8, "count": 8}]}]})
     with pytest.raises(KeyError, match="unknown surface"):
         reg.get("good")
+
+
+def test_shroom_capability_is_rgbw_48_channels():
+    from luxaeterna.synth.capability import shroom_capability
+    from luxaeterna.synth.engine import channels_for
+    cap = shroom_capability("ie7")
+    assert cap.color_order == "RGBW"
+    assert cap.pixel_count * channels_for(cap.color_order) == 48

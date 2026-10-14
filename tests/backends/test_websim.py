@@ -11,7 +11,7 @@ def test_capability_message_describes_the_shroom():
     msg = capability_message(shroom_capability())
     assert msg["type"] == "capability"
     assert msg["pixel_count"] == 12
-    assert msg["color_order"] == "GRB"
+    assert msg["color_order"] == "RGBW"
     assert {"name": "ring", "start": 0, "count": 8} in msg["zones"]
     assert {"name": "stem", "start": 8, "count": 4} in msg["zones"]
 
@@ -21,10 +21,10 @@ def test_record_only_backend_records_pixel_slice_without_serving():
     assert b.is_open is False
     b.open()
     assert b.is_open is True
-    frame = bytearray(range(36)) + bytearray(512 - 36)   # 12 px * 3 = 36
+    frame = bytearray(range(48)) + bytearray(512 - 48)   # 12 px * 4 = 48
     b.send(frame)
     assert len(b.frames) == 1
-    assert b.frames[0] == bytes(range(36))               # sliced to pixel_count*3
+    assert b.frames[0] == bytes(range(48))               # sliced to pixel_count*4
     b.close()
     assert b.is_open is False
 
