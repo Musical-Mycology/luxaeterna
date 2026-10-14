@@ -187,8 +187,9 @@ class CapabilityRegistry:
 
 
 def shroom_capability(surface_id: str = "ie0") -> SurfaceCapability:
-    """The canonical 12-LED Shroom: 8-LED ring + 4-LED stem, GRB."""
+    """The canonical 12-LED Shroom: 8-LED ring + 4-LED stem, RGBW (the
+    device wire, mm-terrarium contract v5: R, G, B, W per pixel)."""
     return SurfaceCapability(
-        surface_id=surface_id, pixel_count=12, color_order="GRB",
+        surface_id=surface_id, pixel_count=12, color_order="RGBW",
         zones=[Zone("ring", 0, 8), Zone("stem", 8, 4), Zone("primary", 0, 12)],
     )

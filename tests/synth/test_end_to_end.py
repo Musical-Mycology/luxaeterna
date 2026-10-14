@@ -36,17 +36,17 @@ def test_note_over_o2_lights_the_shroom():
             break
     assert session.state == "running"
     session.render_into(uni)
-    assert max(uni.get_frame()[:36]) == 0           # running, dark before note
+    assert max(uni.get_frame()[:48]) == 0           # running, dark before note
 
     fake.deliver("/light/midi", "i", (0xB0 << 16) | (74 << 8) | 0)   # CC74=0 -> red
     fake.deliver("/light/midi", "i", (0x90 << 16) | (60 << 8) | 127) # note-on
     session.render_into(uni)
-    frame = uni.get_frame()[:36]
+    frame = uni.get_frame()[:48]
     assert max(frame) > 0                            # lit after note
 
-    # GRB order: byte 0 = green, byte 1 = red. Red hue -> red channel dominant.
-    reds = frame[1::3]
-    greens = frame[0::3]
+    # RGBW order: byte 0 = red, byte 1 = green. Red hue -> red channel dominant.
+    reds = frame[0::4]
+    greens = frame[1::4]
     assert max(reds) > max(greens)
 
 

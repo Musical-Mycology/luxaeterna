@@ -247,8 +247,8 @@ def test_rainbow_frames_agree_across_sessions_at_the_same_clock_value():
     for s, u in ((a, ua), (b, ub)):
         while s._last != 5000.0:
             s.render_into(u)
-    assert ua.get_frame()[:36] == ub.get_frame()[:36]
-    assert max(ua.get_frame()[:36]) > 0
+    assert ua.get_frame()[:48] == ub.get_frame()[:48]
+    assert max(ua.get_frame()[:48]) > 0
     # And it is not a constant frame: one more tick (5000.02) moves the hue.
     a.render_into(ua)
-    assert ua.get_frame()[:36] != ub.get_frame()[:36]
+    assert ua.get_frame()[:48] != ub.get_frame()[:48]

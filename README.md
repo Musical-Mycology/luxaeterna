@@ -20,7 +20,7 @@ behind it, the embedded-devices section, and the dev-environment caveat
 
 `WebSimBackend` is a `DMXBackend` that records DMX frames and streams them to a
 self-contained browser canvas — an on-screen simulator of the 12-LED Shroom
-(8-ring + 4-stem, GRB). No hardware required.
+(8-ring + 4-stem, RGBW). No hardware required.
 
 Install the extra and run the demo:
 

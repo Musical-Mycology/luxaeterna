@@ -33,10 +33,10 @@ def test_engine_writes_universe_on_note():
     engine = LightEngine(cap)
 
     engine.render_into(uni, [binding], t=0.0, dt=0.01, frame=0)
-    assert max(uni.get_frame()[:36]) == 0
+    assert max(uni.get_frame()[:48]) == 0
     binding.routes["note"](60, 1.0)
     engine.render_into(uni, [binding], t=0.01, dt=0.01, frame=1)
-    assert max(uni.get_frame()[:36]) > 0
+    assert max(uni.get_frame()[:48]) > 0
 
 
 def test_engine_isolates_failing_binding_and_reports_it():
@@ -55,7 +55,7 @@ def test_engine_isolates_failing_binding_and_reports_it():
     engine = LightEngine(cap)
     failed = engine.render_into(uni, [bad, good], t=0.0, dt=0.01, frame=0)
     assert failed == [bad]
-    assert max(uni.get_frame()[:36]) > 0        # good binding still rendered
+    assert max(uni.get_frame()[:48]) > 0        # good binding still rendered
 
 
 def test_engine_gain_scales_output():
@@ -72,7 +72,7 @@ def test_engine_gain_scales_output():
                                  t=0.0, dt=0.01, frame=0)
     LightEngine(cap).render_into(uni_dim, [lit_binding()],
                                  t=0.0, dt=0.01, frame=0, gain=0.25)
-    assert 0 < max(uni_dim.get_frame()[:36]) < max(uni_full.get_frame()[:36])
+    assert 0 < max(uni_dim.get_frame()[:48]) < max(uni_full.get_frame()[:48])
 
 
 def test_blend_over_replaces_not_adds():
