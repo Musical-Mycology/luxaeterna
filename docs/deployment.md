@@ -18,7 +18,7 @@ and what each shape costs in messages.
 > and one per Room fixture, renders them on the 44 Hz engine tick, and hands
 > each changed frame to that output's `FixtureSink`s
 > (`control/fixture_sink.py`). The device wire carries **rendered bytes, not
-> MIDI**: `DeviceLinkSink` sends `/<dev>/leds` (36 bytes, 12 LEDs × 3) stamped
+> MIDI**: `DeviceLinkSink` sends `/<dev>/leds` (48 bytes, 12 LEDs × 4, R, G, B, W) stamped
 > with the cue's O2 time `when`, and the device holds the frame until then.
 >
 > **o2lite is the only device wire** as of mm-terrarium's 2026-09-08 cutover.
@@ -139,8 +139,8 @@ is a new sink, and nothing upstream of that seam changes.
 | Any other MCU strip | ESP32 or similar | o2lite C client (it supports ESP32 Arduino) or WLED | either of the above | Not needed yet |
 
 What an embedded sink has to do is small. It accepts a byte frame with
-`len(color_order)` bytes per LED (3 for RGB orders, 4 for RGBW), in the
-fixture's `color_order`. It holds the frame until its `when` on the shared
+4 bytes per LED in fixed R, G, B, W order (mm-terrarium contract v5). The
+strip's physical order is a driver setting, in the firmware or in WLED. It holds the frame until its `when` on the shared
 O2 clock, then latches it to the strip. A device with no clock, such as
 WLED, gets its frame held in Control instead: `ArtNetFixtureSink` sends it
 when it is due. It needs no effects engine, no manifest
@@ -149,8 +149,8 @@ and no MIDI.
 **RGBW: settled for Room fixtures and the Tuneshroom.**
 
 - Room fixtures render RGBW natively as of mm-terrarium PR #140:
-  - A fixture's `color_order` may be four letters.
-  - Channels per pixel are `len(color_order)`.
+  - The wire is always 4 bytes per pixel, R, G, B, W; mm-terrarium retired per-fixture `color_order`.
+  - Luxaeterna's own `SurfaceCapability.color_order` is library API and still sets a surface's channel layout.
   - DEMO's array is `RGBW`.
   - `WebSimBackend` draws W additively as of luxaeterna PR #21.
 - The Tuneshroom wire is RGBW too since mm-terrarium contract v5 (2026-10-14).

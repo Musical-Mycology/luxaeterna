@@ -22,4 +22,4 @@ def test_build_demo_constructs_running_pipeline():
     time.sleep(0.01)   # let real wall-clock time pass so the bloom's attack
                         # envelope (real-clock dt) has a nonzero level to render
     loop._loop_once()
-    assert max(uni.get_frame()[:36]) > 0
+    assert max(uni.get_frame()[:48]) > 0
